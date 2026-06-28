@@ -1,0 +1,40 @@
+# Cobranzas - stack aislado (app Node + Postgres dedicado)
+# La app se publica SOLO en 127.0.0.1:3100; Apache hace de reverse proxy.
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: cobranza_db
+      POSTGRES_USER: cobranza
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      TZ: America/Lima
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Crea las tablas (y config por defecto) la PRIMERA vez que se crea el volumen.
+      - ./backend/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cobranza -d cobranza_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://cobranza:${DB_PASSWORD}@db:5432/cobranza_db
+      PORT: "3100"
+      TZ: America/Lima
+      COOKIE_SECURE: "true"
+      AUTH_EMAIL: ${AUTH_EMAIL}
+      AUTH_PASSWORD: ${AUTH_PASSWORD}
+      SESSION_SECRET: ${SESSION_SECRET}
+    ports:
+      - "127.0.0.1:3100:3100"
+
+volumes:
+  pgdata:

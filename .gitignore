@@ -1,0 +1,19 @@
+# Dependencias
+node_modules/
+**/node_modules/
+
+# Builds
+dist/
+**/dist/
+
+# Variables de entorno con secretos (se versionan solo los .example)
+.env
+**/.env
+.env.deploy
+*.local
+
+# Logs y temporales
+*.log
+.preview-*.png
+.DS_Store
+Thumbs.db

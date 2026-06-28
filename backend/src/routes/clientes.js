@@ -1,0 +1,137 @@
+import { Router } from 'express';
+import { query } from '../db.js';
+import { enriquecerCliente, aISODia1 } from '../logic.js';
+import {
+  reqStr, optStr, reqWhatsapp, reqNum, reqInt, reqFecha, reqBool, optEnum, ValidationError,
+} from '../validate.js';
+
+const PERIODOS = ['MENSUAL', 'TRIMESTRAL', 'SEMESTRAL', 'ANUAL'];
+
+export const clientesRouter = Router();
+
+// :id debe ser numerico (evita 500 por error de tipo en Postgres).
+clientesRouter.param('id', (req, res, next, val) => {
+  if (!/^\d+$/.test(val)) return res.status(404).json({ error: 'Cliente no encontrado.' });
+  next();
+});
+
+// GET /api/clientes  -> lista enriquecida, ordenada por deuda desc.
+// Incluye ultimo_recordatorio (fecha del ultimo aviso por WhatsApp).
+clientesRouter.get('/', async (req, res, next) => {
+  try {
+    const { rows } = await query(
+      `SELECT c.*,
+              (SELECT MAX(r.fecha) FROM recordatorios r WHERE r.cliente_id = c.id) AS ultimo_recordatorio
+       FROM clientes c
+       ORDER BY c.nombre`,
+    );
+    const data = rows.map((c) => enriquecerCliente(c));
+    data.sort((a, b) => b.deuda - a.deuda || a.nombre.localeCompare(b.nombre));
+    res.json(data);
+  } catch (err) { next(err); }
+});
+
+// GET /api/clientes/resumen -> totales para el panel de arriba.
+clientesRouter.get('/resumen', async (req, res, next) => {
+  try {
+    const { rows } = await query('SELECT * FROM clientes');
+    const activos = rows.filter((c) => c.activo).map((c) => enriquecerCliente(c));
+    const deuda_total = activos.reduce((s, c) => s + c.deuda, 0);
+    const morosos = activos.filter((c) => c.meses_debe >= 1).length;
+    const criticos = activos.filter((c) => c.estado === 3).length;
+    // Por vencer: al dia pero solo cubiertos hasta el mes en curso (vence pronto).
+    const por_vencer = activos.filter((c) => c.deuda === 0 && c.meses_cobertura === 0).length;
+    const ingreso_mensual = activos.reduce((s, c) => s + c.monto, 0);
+
+    // Cobrado REAL del mes calendario actual (desde pagos).
+    const { rows: cob } = await query(
+      `SELECT COALESCE(SUM(monto_total), 0)::float AS total, COUNT(*)::int AS n
+       FROM pagos
+       WHERE date_trunc('month', fecha) = date_trunc('month', CURRENT_DATE)`,
+    );
+
+    res.json({
+      deuda_total: Number(deuda_total.toFixed(2)),
+      morosos,
+      criticos,
+      por_vencer,
+      ingreso_mensual: Number(ingreso_mensual.toFixed(2)), // esperado (suma mensualidades)
+      cobrado_mes_actual: Number(cob[0].total.toFixed(2)),
+      pagos_mes_actual: cob[0].n,
+      total_activos: activos.length,
+    });
+  } catch (err) { next(err); }
+});
+
+// GET /api/clientes/:id  -> cliente + historial de pagos.
+clientesRouter.get('/:id', async (req, res, next) => {
+  try {
+    const { rows } = await query('SELECT * FROM clientes WHERE id = $1', [req.params.id]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Cliente no encontrado.' });
+    const { rows: pagos } = await query(
+      'SELECT * FROM pagos WHERE cliente_id = $1 ORDER BY fecha DESC, id DESC',
+      [req.params.id],
+    );
+    res.json({ ...enriquecerCliente(rows[0]), pagos });
+  } catch (err) { next(err); }
+});
+
+function parseClienteBody(body) {
+  return {
+    nombre: reqStr(body, 'nombre', { max: 200 }),
+    whatsapp: reqWhatsapp(body),
+    monto: reqNum(body, 'monto', { min: 0, max: 1e7 }),
+    dia_cobro: reqInt(body, 'dia_cobro', { min: 1, max: 31 }),
+    pagado_hasta: aISODia1(reqFecha(body, 'pagado_hasta')),
+    activo: reqBool(body, 'activo', true),
+    periodo: optEnum(body, 'periodo', PERIODOS, 'MENSUAL'),
+    notas: optStr(body, 'notas', { max: 2000 }),
+  };
+}
+
+// POST /api/clientes  -> crea cliente.
+clientesRouter.post('/', async (req, res, next) => {
+  try {
+    const c = parseClienteBody(req.body);
+    const { rows } = await query(
+      `INSERT INTO clientes (nombre, whatsapp, monto, dia_cobro, pagado_hasta, activo, periodo, notas)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [c.nombre, c.whatsapp, c.monto, c.dia_cobro, c.pagado_hasta, c.activo, c.periodo, c.notas],
+    );
+    res.status(201).json(enriquecerCliente(rows[0]));
+  } catch (err) { next(err); }
+});
+
+// PUT /api/clientes/:id  -> edita cliente.
+clientesRouter.put('/:id', async (req, res, next) => {
+  try {
+    const c = parseClienteBody(req.body);
+    const { rows } = await query(
+      `UPDATE clientes SET nombre=$1, whatsapp=$2, monto=$3, dia_cobro=$4,
+              pagado_hasta=$5, activo=$6, periodo=$7, notas=$8
+       WHERE id=$9 RETURNING *`,
+      [c.nombre, c.whatsapp, c.monto, c.dia_cobro, c.pagado_hasta, c.activo, c.periodo, c.notas, req.params.id],
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Cliente no encontrado.' });
+    res.json(enriquecerCliente(rows[0]));
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/clientes/:id  -> elimina cliente SOLO si no tiene pagos.
+// Si ya tiene historial, no se borra: hay que darlo de baja (activo=false).
+clientesRouter.delete('/:id', async (req, res, next) => {
+  try {
+    const { rows } = await query(
+      'SELECT COUNT(*)::int AS n FROM pagos WHERE cliente_id = $1',
+      [req.params.id],
+    );
+    if (rows[0].n > 0) {
+      return res.status(409).json({
+        error: 'No se puede eliminar: el cliente tiene pagos registrados. Usa "Dar de baja".',
+      });
+    }
+    const { rowCount } = await query('DELETE FROM clientes WHERE id=$1', [req.params.id]);
+    if (rowCount === 0) return res.status(404).json({ error: 'Cliente no encontrado.' });
+    res.status(204).end();
+  } catch (err) { next(err); }
+});
