@@ -108,6 +108,21 @@ export default function App() {
     }
   }
 
+  // Abre el formulario de NUEVO cliente pre-llenado (desde el chat). Sin id -> crea.
+  function abrirNuevoPrefill(prefill) {
+    const hoy = new Date();
+    const ph = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`;
+    setFormCliente({
+      nombre: prefill?.nombre || '',
+      whatsapp: prefill?.whatsapp || '',
+      monto: prefill?.monto ?? '',
+      periodo: prefill?.periodo || 'MENSUAL',
+      dia_cobro: prefill?.dia_cobro || 1,
+      pagado_hasta: ph,
+      activo: true,
+    });
+  }
+
   async function guardarPago(data) {
     await api.registrarPago(data);
     setPagoDe(null);
@@ -330,6 +345,8 @@ export default function App() {
           clientes={clientes}
           geminiConfigurado={geminiConfigurado}
           onCobrar={(c, inicial) => cobrarA(c, inicial)}
+          onAbrirCliente={(c) => { setChatOpen(false); abrirEditar(c); }}
+          onNuevoCliente={(prefill) => { setChatOpen(false); abrirNuevoPrefill(prefill); }}
           onAbrirAjustes={() => { setChatOpen(false); setConfigOpen(true); }}
           onClose={() => setChatOpen(false)}
         />

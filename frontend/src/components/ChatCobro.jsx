@@ -4,7 +4,7 @@ import { api } from '../api.js';
 import { parseCobro } from '../lib/parseCobro.js';
 import { blobToWavBase64 } from '../lib/audioWav.js';
 import { soles } from '../lib/ui.js';
-import { IconMic, IconSend, IconCash, IconPlay, IconPause, IconStop } from './Icons.jsx';
+import { IconMic, IconSend, IconCash, IconPlay, IconPause, IconStop, IconPlus, IconChevron } from './Icons.jsx';
 
 const VACIO = { cliente: null, monto: null, meses: null, abono: false, fecha: null, medio: null };
 
@@ -69,14 +69,14 @@ function VoiceBubble({ url, durMs }) {
   );
 }
 
-export default function ChatCobro({ clientes, geminiConfigurado, onCobrar, onAbrirAjustes, onClose }) {
+export default function ChatCobro({ clientes, geminiConfigurado, onCobrar, onAbrirCliente, onNuevoCliente, onAbrirAjustes, onClose }) {
   const [mensajes, setMensajes] = useState(() => [{
     from: 'bot',
     kind: 'text',
     time: hhmm(),
     text: geminiConfigurado
-      ? 'Hola 👋 Cuéntame el cobro por voz o escríbelo. Ej: "Ana me pagó 100 soles por Yape hoy".'
-      : 'Para el chat de voz necesitas tu API key de Gemini (gratis). Configúrala en Ajustes; mientras tanto puedes registrar el pago manual.',
+      ? 'Hola 👋 Dime un cobro ("Ana me pagó 100 yape hoy"), o pídeme crear/eliminar un cliente, anular un pago, o consultar quién debe.'
+      : 'Para el chat necesitas tu API key de Gemini (gratis). Configúrala en Ajustes; mientras tanto puedes registrar el pago manual.',
   }]);
   const [texto, setTexto] = useState('');
   const [recording, setRecording] = useState(false);
@@ -84,6 +84,7 @@ export default function ChatCobro({ clientes, geminiConfigurado, onCobrar, onAbr
   const [enviando, setEnviando] = useState(false);
   const [sinKey, setSinKey] = useState(!geminiConfigurado);
   const [draft, setDraft] = useState(VACIO);
+  const [pendiente, setPendiente] = useState(null); // accion no-pago lista para abrir su pantalla
 
   const draftRef = useRef(VACIO);
   const scrollRef = useRef(null);
@@ -128,9 +129,38 @@ export default function ChatCobro({ clientes, geminiConfigurado, onCobrar, onAbr
       return;
     }
     setSinKey(false);
-    const next = combina(draftRef.current, resp);
-    setDraftBoth(next);
-    pushBot(resp.respuesta || (completo(next) ? `Listo, ${next.cliente.nombre}.` : '¿Me das un dato más?'));
+    const accion = resp.accion || 'registrar_pago';
+
+    // Pago: acumula en el borrador y muestra la confirmacion (tarjeta "Revisar y guardar").
+    if (accion === 'registrar_pago') {
+      setPendiente(null);
+      const next = combina(draftRef.current, resp);
+      setDraftBoth(next);
+      pushBot(resp.respuesta || (completo(next) ? `Listo, ${next.cliente.nombre}.` : '¿Me das un dato más?'));
+      return;
+    }
+
+    // Acciones que se resuelven abriendo la ficha del cliente (anular pago, eliminar,
+    // dar de baja, reactivar) — ahi estan los botones con su confirmacion.
+    if (['eliminar_pago', 'eliminar_cliente', 'baja_cliente', 'reactivar_cliente'].includes(accion)) {
+      setDraftBoth(VACIO);
+      pushBot(resp.respuesta);
+      setPendiente(resp.cliente ? { tipo: 'ficha', cliente: resp.cliente } : null);
+      return;
+    }
+
+    // Crear cliente: abre el formulario de nuevo cliente pre-llenado.
+    if (accion === 'crear_cliente') {
+      setDraftBoth(VACIO);
+      pushBot(resp.respuesta);
+      setPendiente({ tipo: 'nuevo', prefill: resp.nuevo_cliente || {} });
+      return;
+    }
+
+    // Consultar / ninguna: solo responde.
+    setDraftBoth(VACIO);
+    setPendiente(null);
+    pushBot(resp.respuesta || '¿En qué te ayudo?');
   }
 
   // Fallback local (sin conexion al asistente): parser por reglas, solo texto.
@@ -151,6 +181,7 @@ export default function ChatCobro({ clientes, geminiConfigurado, onCobrar, onAbr
     if (!txt || enviando) return;
     pushUser(txt);
     setTexto('');
+    setPendiente(null);
     setEnviando(true);
     try {
       const resp = await api.chatCobro({ texto: txt, contexto: contextoDraft() });
@@ -163,6 +194,7 @@ export default function ChatCobro({ clientes, geminiConfigurado, onCobrar, onAbr
   }
 
   async function enviarAudio(blob) {
+    setPendiente(null);
     setEnviando(true);
     try {
       const audio = await blobToWavBase64(blob);
@@ -307,6 +339,26 @@ export default function ChatCobro({ clientes, geminiConfigurado, onCobrar, onAbr
             className="w-full h-12 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 text-slate-950 font-semibold hover:bg-emerald-400 transition-transform active:scale-[0.98]"
           >
             <IconCash width={20} height={20} /> Revisar y guardar — {draft.cliente.nombre}
+          </button>
+        )}
+
+        {pendiente?.tipo === 'ficha' && (
+          <button
+            type="button"
+            onClick={() => onAbrirCliente(pendiente.cliente)}
+            className="w-full h-12 inline-flex items-center justify-center gap-2 rounded-xl bg-slate-100 text-slate-900 font-semibold hover:bg-white transition-transform active:scale-[0.98]"
+          >
+            Abrir ficha de {pendiente.cliente.nombre} <IconChevron width={18} height={18} />
+          </button>
+        )}
+
+        {pendiente?.tipo === 'nuevo' && (
+          <button
+            type="button"
+            onClick={() => onNuevoCliente(pendiente.prefill)}
+            className="w-full h-12 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 text-slate-950 font-semibold hover:bg-emerald-400 transition-transform active:scale-[0.98]"
+          >
+            <IconPlus width={18} height={18} /> Crear cliente{pendiente.prefill?.nombre ? ` — ${pendiente.prefill.nombre}` : ''}
           </button>
         )}
 
