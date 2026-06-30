@@ -15,6 +15,7 @@ import { importRouter } from './routes/import.js';
 import { ingresosRouter } from './routes/ingresos.js';
 import { configRouter } from './routes/config.js';
 import { recordatoriosRouter } from './routes/recordatorios.js';
+import { chatCobroRouter } from './routes/chatCobro.js';
 
 const app = express();
 const PORT = process.env.PORT || 3100;
@@ -50,6 +51,7 @@ app.use('/api/pagos', pagosRouter);
 app.use('/api/ingresos', ingresosRouter);
 app.use('/api/config', configRouter);
 app.use('/api/recordatorios', recordatoriosRouter);
+app.use('/api/chat-cobro', chatCobroRouter);
 app.use('/api/export', exportRouter);
 app.use('/api/import', importRouter);
 

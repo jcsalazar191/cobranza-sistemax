@@ -38,9 +38,10 @@ function Editor({ titulo, ayuda, valor, setValor, placeholders, ejemplo }) {
   );
 }
 
-export default function ConfigModal({ plantillaDeuda, plantillaAldia, onClose, onGuardar }) {
+export default function ConfigModal({ plantillaDeuda, plantillaAldia, geminiConfigurado, onClose, onGuardar }) {
   const [deuda, setDeuda] = useState(plantillaDeuda || PLANTILLA_DEFAULT);
   const [aldia, setAldia] = useState(plantillaAldia || PLANTILLA_ALDIA_DEFAULT);
+  const [geminiKey, setGeminiKey] = useState('');
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
 
@@ -50,7 +51,8 @@ export default function ConfigModal({ plantillaDeuda, plantillaAldia, onClose, o
     if (!deuda.trim() || !aldia.trim()) { setError('Los mensajes no pueden estar vacios.'); return; }
     setGuardando(true);
     try {
-      await onGuardar(deuda.trim(), aldia.trim());
+      // La key solo se envia si el usuario escribio algo (vacio = no cambiar).
+      await onGuardar(deuda.trim(), aldia.trim(), geminiKey.trim() || undefined);
     } catch (err) {
       setError(err.message);
       setGuardando(false);
@@ -94,6 +96,30 @@ export default function ConfigModal({ plantillaDeuda, plantillaAldia, onClose, o
           valor={aldia} setValor={setAldia}
           placeholders={PLACEHOLDERS_ALDIA} ejemplo={EJ_ALDIA}
         />
+
+        <div className="pt-2 border-t border-slate-700/60">
+          <h3 className="text-sm font-semibold text-slate-200">Asistente del chat de voz (Gemini)</h3>
+          <p className="text-xs text-slate-500 mb-2">
+            {geminiConfigurado
+              ? 'API key configurada ✓. Escribe una nueva solo si quieres reemplazarla.'
+              : 'Pega tu API key gratuita para activar el chat de voz. Se guarda en tu servidor, nunca se comparte.'}
+          </p>
+          <input
+            type="password"
+            value={geminiKey}
+            onChange={(e) => setGeminiKey(e.target.value)}
+            autoComplete="off"
+            placeholder={geminiConfigurado ? '•••••••••• (sin cambios)' : 'AIza... o AQ...'}
+            className="w-full h-12 px-4 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 placeholder:text-slate-500 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/60"
+          />
+          <p className="mt-2 text-xs text-slate-500">
+            Consíguela gratis en{' '}
+            <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-emerald-300 underline">
+              aistudio.google.com/apikey
+            </a>.
+          </p>
+        </div>
+
         {error && <p className="text-sm text-red-400">{error}</p>}
       </form>
     </Modal>

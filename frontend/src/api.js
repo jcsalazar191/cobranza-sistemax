@@ -33,6 +33,7 @@ export const api = {
   registrarPago: (data) => request('/pagos', { method: 'POST', body: JSON.stringify(data) }),
   eliminarPago: (id) => request(`/pagos/${id}`, { method: 'DELETE' }),
   registrarRecordatorio: (cliente_id) => request('/recordatorios', { method: 'POST', body: JSON.stringify({ cliente_id }) }),
+  chatCobro: (payload) => request('/chat-cobro', { method: 'POST', body: JSON.stringify(payload) }),
   ingresos: (anio) => request(`/ingresos/${anio}`),
   getConfig: () => request('/config'),
   guardarConfig: (data) => request('/config', { method: 'PUT', body: JSON.stringify(data) }),

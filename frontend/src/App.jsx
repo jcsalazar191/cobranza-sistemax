@@ -43,6 +43,7 @@ export default function App() {
   const [formCliente, setFormCliente] = useState(undefined); // undefined=cerrado, null=nuevo, obj=editar
   const [mensajeTemplate, setMensajeTemplate] = useState(PLANTILLA_DEFAULT);
   const [mensajeAldia, setMensajeAldia] = useState(PLANTILLA_ALDIA_DEFAULT);
+  const [geminiConfigurado, setGeminiConfigurado] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
   const [datosOpen, setDatosOpen] = useState(false);
   const [formKey, setFormKey] = useState(0); // fuerza remount del form al refrescar en sitio
@@ -59,6 +60,7 @@ export default function App() {
       setResumen(res);
       if (cfg?.mensaje_template) setMensajeTemplate(cfg.mensaje_template);
       if (cfg?.mensaje_aldia) setMensajeAldia(cfg.mensaje_aldia);
+      setGeminiConfigurado(Boolean(cfg?.gemini_configurado));
     } catch (err) {
       setErrorCarga(err.message);
     } finally {
@@ -133,10 +135,13 @@ export default function App() {
     await cargar();
   }
 
-  async function guardarConfig(template, aldia) {
-    const r = await api.guardarConfig({ mensaje_template: template, mensaje_aldia: aldia });
+  async function guardarConfig(template, aldia, geminiKey) {
+    const payload = { mensaje_template: template, mensaje_aldia: aldia };
+    if (geminiKey !== undefined) payload.gemini_api_key = geminiKey;
+    const r = await api.guardarConfig(payload);
     setMensajeTemplate(r.mensaje_template);
     setMensajeAldia(r.mensaje_aldia);
+    setGeminiConfigurado(Boolean(r.gemini_configurado));
     setConfigOpen(false);
   }
 
@@ -308,6 +313,7 @@ export default function App() {
         <ConfigModal
           plantillaDeuda={mensajeTemplate}
           plantillaAldia={mensajeAldia}
+          geminiConfigurado={geminiConfigurado}
           onClose={() => setConfigOpen(false)}
           onGuardar={guardarConfig}
         />
@@ -322,7 +328,9 @@ export default function App() {
       {chatOpen && (
         <ChatCobro
           clientes={clientes}
+          geminiConfigurado={geminiConfigurado}
           onCobrar={(c, inicial) => cobrarA(c, inicial)}
+          onAbrirAjustes={() => { setChatOpen(false); setConfigOpen(true); }}
           onClose={() => setChatOpen(false)}
         />
       )}

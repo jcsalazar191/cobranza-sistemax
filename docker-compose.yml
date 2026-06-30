@@ -33,6 +33,9 @@ services:
       AUTH_EMAIL: ${AUTH_EMAIL}
       AUTH_PASSWORD: ${AUTH_PASSWORD}
       SESSION_SECRET: ${SESSION_SECRET}
+      # Respaldo opcional; lo normal es configurar la key desde Ajustes (se guarda en la BD).
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
     ports:
       - "127.0.0.1:3100:3100"
 

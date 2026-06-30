@@ -46,3 +46,12 @@ export const IconSend = (p) => (
 export const IconCash = (p) => (
   <svg {...base} {...p}><rect x="2" y="6" width="20" height="12" rx="2" /><circle cx="12" cy="12" r="2.5" /><path d="M6 12h.01M18 12h.01" /></svg>
 );
+export const IconPlay = (p) => (
+  <svg {...base} fill="currentColor" stroke="none" {...p}><path d="M8 5v14l11-7z" /></svg>
+);
+export const IconPause = (p) => (
+  <svg {...base} fill="currentColor" stroke="none" {...p}><rect x="7" y="5" width="3" height="14" rx="1" /><rect x="14" y="5" width="3" height="14" rx="1" /></svg>
+);
+export const IconStop = (p) => (
+  <svg {...base} fill="currentColor" stroke="none" {...p}><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+);
