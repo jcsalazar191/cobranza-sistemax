@@ -6,6 +6,17 @@ export const chatCobroRouter = Router();
 
 const MEDIOS = ['EFECTIVO', 'BCP', 'BN', 'YAPE'];
 
+// Gemini, cuando hay audio en la entrada, a veces corrompe los bytes de algunas
+// tildes (p.ej. "í"). Por eso pedimos respuesta sin acentos y, por si acaso,
+// limpiamos el caracter de reemplazo (U+FFFD) y el soft hyphen (U+00AD) que deja.
+function limpiarTexto(s) {
+  return String(s || '')
+    .replace(/�/g, '')  // caracter de reemplazo de UTF-8 roto
+    .replace(/­/g, '')  // soft hyphen que deja la corrupcion
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+
 // Fecha de hoy en hora local (el proceso corre con TZ=America/Lima).
 function hoyLima() {
   const d = new Date();
@@ -69,6 +80,7 @@ chatCobroRouter.post('/', async (req, res, next) => {
       '- transcript: lo que entendiste (transcribe la nota de voz si la hay).',
       '- faltan: incluye "cliente" si cliente_id=0, y "monto" si monto=0.',
       '- respuesta: 1-2 frases calidas y naturales en espanol peruano. Si falta algo, pidelo amable; si esta completo, confirma el cobro (cliente, monto, medio).',
+      'MUY IMPORTANTE: escribe "respuesta" y "transcript" SIN tildes, sin acentos y sin la letra enie (solo letras a-z), porque el canal de audio corrompe los acentos. Ej: usa "registre", "cuanto", "podrias", "si".',
     ];
     if (ctx) {
       systemLines.push(`Datos ya conocidos de este cobro (mantenlos y completa solo lo que falte): ${JSON.stringify(ctx)}`);
@@ -132,8 +144,8 @@ chatCobroRouter.post('/', async (req, res, next) => {
       abono,
       fecha,
       medio,
-      transcript: typeof parsed.transcript === 'string' ? parsed.transcript : '',
-      respuesta: typeof parsed.respuesta === 'string' ? parsed.respuesta : '',
+      transcript: limpiarTexto(parsed.transcript),
+      respuesta: limpiarTexto(parsed.respuesta),
       faltan,
     });
   } catch (err) {
