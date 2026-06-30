@@ -1,12 +1,20 @@
 # Cobranzas
 
-Webapp interna de cobranzas (mobile-first). Controla la deuda mensual de tus
-clientes de software: cuánto deben, quién está al día y quién en crítico,
-registra pagos y manda recordatorios por WhatsApp.
+Webapp de cobranzas (mobile-first) para pequeños negocios. Controla la deuda de
+tus clientes: cuánto deben, quién está al día y quién en crítico, registra pagos
+(con modelo de **saldo a favor**), manda recordatorios por WhatsApp y registra
+cobros **por chat de voz o texto** con un asistente de IA.
 
 - **Frontend:** React + Vite + Tailwind v4 (mobile-first, modo oscuro).
 - **Backend:** Node + Express (API REST).
 - **Base de datos:** PostgreSQL.
+- **Asistente IA (opcional):** chat de voz/texto para registrar pagos, anular,
+  crear clientes y consultar deudas. Usa **tu propia API key gratuita** de Gemini
+  (y NVIDIA como respaldo) — se configura dentro de la app, en Ajustes.
+
+> **Auto-hospedable y privado:** es código abierto (MIT). Lo despliegas en tu
+> propio servidor, así que **tus datos de cobranza viven contigo**, no en la nube
+> de nadie. Cada despliegue es una instancia independiente.
 
 ---
 
@@ -24,6 +32,39 @@ apk-cobranza/
    ├─ src/
    └─ .env
 ```
+
+---
+
+## Desplegar con Docker (recomendado para tu servidor)
+
+La forma más simple de tener tu propia instancia. Necesitas **Docker** y
+**Docker Compose**. El stack levanta la app (Node, sirve API + frontend en el
+puerto `3100`) y un PostgreSQL dedicado, aislados.
+
+```bash
+git clone https://github.com/jcsalazar191/cobranza-sistemax.git
+cd cobranza-sistemax
+
+# 1) Configura el entorno (claves fuertes con: openssl rand -base64 24)
+cp .env.deploy.example .env
+nano .env          # DB_PASSWORD, AUTH_EMAIL, AUTH_PASSWORD, SESSION_SECRET
+
+# 2) Levanta todo
+docker compose up -d --build
+```
+
+La app queda en `http://127.0.0.1:3100`. Para exponerla con dominio + HTTPS, pon
+un reverse-proxy delante (Apache/Nginx) apuntando a ese puerto. Los datos
+persisten en el volumen `pgdata`.
+
+- **Login:** el usuario/clave que pusiste en `AUTH_EMAIL` / `AUTH_PASSWORD`.
+- **Asistente IA (opcional):** entra a **Ajustes** (botón "Mensaje") y pega tu
+  API key gratuita de [Gemini](https://aistudio.google.com/apikey)
+  (y opcionalmente [NVIDIA](https://build.nvidia.com) como respaldo). Sin key, el
+  chat avisa y todo lo demás funciona igual. **La key se guarda en tu base de
+  datos, nunca se comparte.**
+
+> Para correrlo en local sin Docker (desarrollo), mira la sección siguiente.
 
 ---
 
@@ -184,3 +225,17 @@ autenticación y HTTPS. La zona horaria queda fijada a `America/Lima`.
 
 Botón **Respaldo** (arriba derecha) o `GET /api/export`: descarga un JSON con
 todos los clientes y pagos.
+
+---
+
+## Privacidad y seguridad
+
+- Tus datos (clientes, pagos) viven **solo en tu servidor/base de datos**.
+- Las API keys de IA se guardan en tu base de datos y **nunca se exponen** al
+  frontend ni se comparten.
+- Antes de exponer la app a internet: usa una `AUTH_PASSWORD` fuerte, HTTPS, y
+  haz respaldos del volumen de Postgres.
+
+## Licencia
+
+[MIT](LICENSE) — úsalo, modifícalo y despliégalo libremente. Sin garantía.
