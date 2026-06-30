@@ -300,12 +300,20 @@ export default function ChatCobro({ clientes, geminiConfigurado, onCambio, onAbr
     setPendiente(null);
     setDeshacer(null);
     setEnviando(true);
+    let audio;
     try {
-      const audio = await blobToWavBase64(blob);
+      audio = await blobToWavBase64(blob);
+    } catch {
+      pushBot('No pude leer el audio. Repítelo o escríbelo, por favor.');
+      setEnviando(false);
+      return;
+    }
+    try {
       const resp = await api.chatCobro({ audio, contexto: contextoDraft() });
       await aplicarRespuesta(resp);
-    } catch {
-      pushBot('No pude procesar el audio. Repítelo o escríbelo, por favor.');
+    } catch (e) {
+      // Muestra el motivo real (p.ej. limite del asistente) y sugiere escribir.
+      pushBot(e?.message || 'No pude procesar el audio. Escríbelo, por favor.');
     } finally {
       setEnviando(false);
     }

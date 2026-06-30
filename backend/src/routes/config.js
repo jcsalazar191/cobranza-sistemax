@@ -11,7 +11,8 @@ const DEFAULTS = {
     'Hola {nombre}, su servicio esta cubierto hasta {cubierto}. Le recordamos su proxima renovacion. Gracias.',
 };
 
-const GEMINI_MODEL_DEFAULT = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+// flash-lite-latest: cuota gratis mucho mas alta que 2.5-flash (que tiene ~20/dia).
+const GEMINI_MODEL_DEFAULT = process.env.GEMINI_MODEL || 'gemini-flash-lite-latest';
 
 async function cfgMap() {
   const { rows } = await query('SELECT clave, valor FROM config');

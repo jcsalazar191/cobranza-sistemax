@@ -139,7 +139,10 @@ chatCobroRouter.post('/', async (req, res, next) => {
     if (!r.ok) {
       const errTxt = await r.text().catch(() => '');
       console.error('Gemini error', r.status, errTxt.slice(0, 400));
-      return res.status(502).json({ error: 'El asistente no respondio. Intenta de nuevo o usa el cobro manual.' });
+      const msg = r.status === 429
+        ? 'El asistente llego a su limite gratis por ahora. Espera unos minutos, o escribe el cobro (igual se registra).'
+        : 'El asistente no respondio. Intenta de nuevo o usa el cobro manual.';
+      return res.status(502).json({ error: msg });
     }
 
     const data = await r.json();
