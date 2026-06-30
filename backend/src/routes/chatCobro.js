@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { query } from '../db.js';
 import { enriquecerCliente } from '../logic.js';
-import { getGeminiCreds } from './config.js';
+import { getGeminiCreds, getNvidiaCreds } from './config.js';
 
 export const chatCobroRouter = Router();
 
@@ -56,6 +56,61 @@ const RESPONSE_SCHEMA = {
   required: ['accion', 'respuesta'],
 };
 
+// Llama a Gemini (multimodal: texto y/o audio). Devuelve el JSON parseado o lanza
+// (err.status con el codigo HTTP).
+async function pedirGemini({ system, parts, model, apiKey }) {
+  const body = {
+    system_instruction: { parts: [{ text: system }] },
+    contents: [{ role: 'user', parts }],
+    generationConfig: {
+      responseMimeType: 'application/json',
+      responseSchema: RESPONSE_SCHEMA,
+      thinkingConfig: { thinkingBudget: 0 },
+      temperature: 0.2,
+    },
+  };
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!r.ok) {
+    const e = new Error(`Gemini ${r.status}`);
+    e.status = r.status;
+    e.detalle = (await r.text().catch(() => '')).slice(0, 300);
+    throw e;
+  }
+  const data = await r.json();
+  const raw = (data?.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
+  return JSON.parse(raw);
+}
+
+// Respaldo: NVIDIA NIM (OpenAI-compatible). Solo TEXTO (no transcribe audio).
+async function pedirNvidia({ system, texto, creds }) {
+  const r = await fetch(`${creds.baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${creds.apiKey}` },
+    body: JSON.stringify({
+      model: creds.model,
+      messages: [{ role: 'system', content: system }, { role: 'user', content: texto }],
+      temperature: 0.2,
+      max_tokens: 600,
+      response_format: { type: 'json_object' },
+    }),
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!r.ok) {
+    const e = new Error(`NVIDIA ${r.status}`);
+    e.status = r.status;
+    e.detalle = (await r.text().catch(() => '')).slice(0, 300);
+    throw e;
+  }
+  const data = await r.json();
+  return JSON.parse(data?.choices?.[0]?.message?.content || '');
+}
+
 // POST /api/chat-cobro
 // body: { texto?: string, audio?: { mime, data }, contexto?: object }
 // Asistente de cobranzas con Gemini: detecta UNA accion y sus datos. La app
@@ -103,6 +158,7 @@ chatCobroRouter.post('/', async (req, res, next) => {
       'Reglas: fecha del pago YYYY-MM-DD ("hoy"=hoy, "ayer"=dia anterior, "el 15"=dia 15 de este mes; default hoy). faltan: "cliente" si la accion necesita cliente y cliente_id=0; "monto" si registrar_pago sin monto.',
       'respuesta: 1-2 frases calidas en espanol peruano. Si falta un dato, pidelo amable. Si es consulta, responde el dato. Si es una accion, di que abriras la pantalla para revisar/confirmar.',
       'MUY IMPORTANTE: en "respuesta" y "transcript" NO uses tildes, acentos ni la letra enie (solo letras a-z), porque el audio corrompe los acentos.',
+      'Devuelve UNICAMENTE un objeto JSON con estas claves: accion, cliente_id (entero), monto (numero), meses (entero), abono (bool), fecha (YYYY-MM-DD), medio, nuevo_cliente {nombre,whatsapp,monto,periodo,dia_cobro}, transcript, respuesta, faltan (lista). Sin texto fuera del JSON.',
     ];
     if (ctx) {
       systemLines.push(`Datos ya conocidos de este cobro (mantenlos y completa solo lo que falte): ${JSON.stringify(ctx)}`);
@@ -117,39 +173,27 @@ chatCobroRouter.post('/', async (req, res, next) => {
       if (!texto) parts.push({ text: 'Interpreta esta nota de voz y decide la accion.' });
     }
 
-    const body = {
-      system_instruction: { parts: [{ text: system }] },
-      contents: [{ role: 'user', parts }],
-      generationConfig: {
-        responseMimeType: 'application/json',
-        responseSchema: RESPONSE_SCHEMA,
-        thinkingConfig: { thinkingBudget: 0 },
-        temperature: 0.2,
-      },
-    };
-
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-    const r = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(30000),
-    });
-
-    if (!r.ok) {
-      const errTxt = await r.text().catch(() => '');
-      console.error('Gemini error', r.status, errTxt.slice(0, 400));
-      const msg = r.status === 429
-        ? 'El asistente llego a su limite gratis por ahora. Espera unos minutos, o escribe el cobro (igual se registra).'
-        : 'El asistente no respondio. Intenta de nuevo o usa el cobro manual.';
-      return res.status(502).json({ error: msg });
-    }
-
-    const data = await r.json();
-    const raw = (data?.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
+    // Primario: Gemini (texto o audio). Si falla y la entrada es TEXTO, respaldo NVIDIA.
     let parsed;
-    try { parsed = JSON.parse(raw); } catch {
-      return res.status(502).json({ error: 'Respuesta del asistente no valida. Intenta de nuevo.' });
+    try {
+      parsed = await pedirGemini({ system, parts, model, apiKey });
+    } catch (eGemini) {
+      console.error('Gemini fallo:', eGemini.status || '', eGemini.detalle || eGemini.message);
+      const nv = await getNvidiaCreds();
+      if (texto && nv.apiKey) {
+        try {
+          parsed = await pedirNvidia({ system, texto, creds: nv });
+          console.log('Respaldo NVIDIA usado.');
+        } catch (eNvidia) {
+          console.error('NVIDIA fallo:', eNvidia.status || '', eNvidia.detalle || eNvidia.message);
+        }
+      }
+      if (!parsed) {
+        const msg = eGemini.status === 429
+          ? 'El asistente llego a su limite por ahora. Espera unos minutos o escribe el cobro (igual se registra).'
+          : 'El asistente no respondio. Intenta de nuevo o usa el cobro manual.';
+        return res.status(502).json({ error: msg });
+      }
     }
 
     const accion = ACCIONES.includes(parsed.accion) ? parsed.accion : 'ninguna';

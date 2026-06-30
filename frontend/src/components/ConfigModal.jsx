@@ -38,10 +38,11 @@ function Editor({ titulo, ayuda, valor, setValor, placeholders, ejemplo }) {
   );
 }
 
-export default function ConfigModal({ plantillaDeuda, plantillaAldia, geminiConfigurado, onClose, onGuardar }) {
+export default function ConfigModal({ plantillaDeuda, plantillaAldia, geminiConfigurado, nvidiaConfigurado, onClose, onGuardar }) {
   const [deuda, setDeuda] = useState(plantillaDeuda || PLANTILLA_DEFAULT);
   const [aldia, setAldia] = useState(plantillaAldia || PLANTILLA_ALDIA_DEFAULT);
   const [geminiKey, setGeminiKey] = useState('');
+  const [nvidiaKey, setNvidiaKey] = useState('');
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
 
@@ -51,8 +52,8 @@ export default function ConfigModal({ plantillaDeuda, plantillaAldia, geminiConf
     if (!deuda.trim() || !aldia.trim()) { setError('Los mensajes no pueden estar vacios.'); return; }
     setGuardando(true);
     try {
-      // La key solo se envia si el usuario escribio algo (vacio = no cambiar).
-      await onGuardar(deuda.trim(), aldia.trim(), geminiKey.trim() || undefined);
+      // Las keys solo se envian si el usuario escribio algo (vacio = no cambiar).
+      await onGuardar(deuda.trim(), aldia.trim(), geminiKey.trim() || undefined, nvidiaKey.trim() || undefined);
     } catch (err) {
       setError(err.message);
       setGuardando(false);
@@ -116,6 +117,26 @@ export default function ConfigModal({ plantillaDeuda, plantillaAldia, geminiConf
             Consíguela gratis en{' '}
             <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-emerald-300 underline">
               aistudio.google.com/apikey
+            </a>.
+          </p>
+
+          <p className="text-xs text-slate-500 mt-4 mb-2">
+            <span className="font-semibold text-slate-300">Respaldo (NVIDIA) — opcional.</span>{' '}
+            {nvidiaConfigurado ? 'Configurado ✓. ' : ''}
+            Si Gemini llega a su límite, el chat de texto usa este respaldo gratis.
+          </p>
+          <input
+            type="password"
+            value={nvidiaKey}
+            onChange={(e) => setNvidiaKey(e.target.value)}
+            autoComplete="off"
+            placeholder={nvidiaConfigurado ? '•••••••••• (sin cambios)' : 'nvapi-...'}
+            className="w-full h-12 px-4 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 placeholder:text-slate-500 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/60"
+          />
+          <p className="mt-2 text-xs text-slate-500">
+            Gratis en{' '}
+            <a href="https://build.nvidia.com" target="_blank" rel="noopener noreferrer" className="text-emerald-300 underline">
+              build.nvidia.com
             </a>.
           </p>
         </div>
