@@ -8,8 +8,10 @@ import ClienteFormModal from './components/ClienteFormModal.jsx';
 import IngresosView from './components/IngresosView.jsx';
 import ConfigModal from './components/ConfigModal.jsx';
 import DatosModal from './components/DatosModal.jsx';
+import CobrarPicker from './components/CobrarPicker.jsx';
+import ChatCobro from './components/ChatCobro.jsx';
 import Login from './components/Login.jsx';
-import { IconPlus, IconDownload, IconChat, IconDatabase, IconLogout } from './components/Icons.jsx';
+import { IconPlus, IconChat, IconDatabase, IconLogout, IconCash, IconMic } from './components/Icons.jsx';
 import { PLANTILLA_DEFAULT, PLANTILLA_ALDIA_DEFAULT, normaliza } from './lib/ui.js';
 
 function pasaFiltro(c, filtro) {
@@ -35,6 +37,9 @@ export default function App() {
   const [vista, setVista] = useState('clientes'); // 'clientes' | 'ingresos'
 
   const [pagoDe, setPagoDe] = useState(null);     // cliente para modal de pago
+  const [pagoInicial, setPagoInicial] = useState(null); // valores pre-llenados (desde chat)
+  const [cobrarOpen, setCobrarOpen] = useState(false);  // selector de cliente para cobrar
+  const [chatOpen, setChatOpen] = useState(false);      // chat de voz/texto
   const [formCliente, setFormCliente] = useState(undefined); // undefined=cerrado, null=nuevo, obj=editar
   const [mensajeTemplate, setMensajeTemplate] = useState(PLANTILLA_DEFAULT);
   const [mensajeAldia, setMensajeAldia] = useState(PLANTILLA_ALDIA_DEFAULT);
@@ -104,7 +109,21 @@ export default function App() {
   async function guardarPago(data) {
     await api.registrarPago(data);
     setPagoDe(null);
+    setPagoInicial(null);
     await cargar();
+  }
+
+  // Abre el modal de pago para un cliente (desde el selector o el chat).
+  function cobrarA(cliente, inicial = null) {
+    setCobrarOpen(false);
+    setChatOpen(false);
+    setPagoInicial(inicial);
+    setPagoDe(cliente);
+  }
+
+  function cerrarPago() {
+    setPagoDe(null);
+    setPagoInicial(null);
   }
 
   async function guardarCliente(data, id) {
@@ -226,6 +245,16 @@ export default function App() {
           <IngresosView />
         ) : (
           <>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setFormCliente(null)}
+                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg bg-slate-900 border border-slate-700/60 text-sm text-slate-300 hover:bg-slate-800 hover:text-slate-100 transition-colors cursor-pointer"
+              >
+                <IconPlus width={16} height={16} /> Nuevo cliente
+              </button>
+            </div>
+
             <Filtros
               busqueda={busqueda} onBusqueda={setBusqueda}
               filtro={filtro} onFiltro={setFiltro}
@@ -253,15 +282,26 @@ export default function App() {
         )}
       </div>
 
-      {/* FAB nuevo cliente (solo en vista Clientes) */}
+      {/* Acciones principales: Cobrar (manda) + chat de voz. Solo en vista Clientes. */}
       {vista === 'clientes' && (
-        <button
-          type="button"
-          onClick={() => setFormCliente(null)}
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 inline-flex items-center gap-2 h-14 px-6 rounded-full bg-emerald-500 text-slate-950 font-semibold shadow-lg shadow-emerald-500/20 hover:bg-emerald-400 transition-colors cursor-pointer"
-        >
-          <IconPlus /> Nuevo cliente
-        </button>
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setCobrarOpen(true)}
+            className="inline-flex items-center gap-2 h-14 px-7 rounded-full bg-emerald-500 text-slate-950 font-bold text-base shadow-lg shadow-emerald-500/25 hover:bg-emerald-400 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-300"
+          >
+            <IconCash width={22} height={22} /> Cobrar
+          </button>
+          <button
+            type="button"
+            onClick={() => setChatOpen(true)}
+            aria-label="Cobrar por chat de voz"
+            title="Cobrar por voz o texto"
+            className="grid place-items-center w-14 h-14 rounded-full bg-slate-800 text-emerald-300 border border-slate-700 shadow-lg hover:bg-slate-700 hover:text-emerald-200 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500/60"
+          >
+            <IconMic width={24} height={24} />
+          </button>
+        </div>
       )}
 
       {configOpen && (
@@ -272,8 +312,22 @@ export default function App() {
           onGuardar={guardarConfig}
         />
       )}
+      {cobrarOpen && (
+        <CobrarPicker
+          clientes={clientes}
+          onElegir={(c) => cobrarA(c)}
+          onClose={() => setCobrarOpen(false)}
+        />
+      )}
+      {chatOpen && (
+        <ChatCobro
+          clientes={clientes}
+          onCobrar={(c, inicial) => cobrarA(c, inicial)}
+          onClose={() => setChatOpen(false)}
+        />
+      )}
       {pagoDe && (
-        <PagoModal cliente={pagoDe} onClose={() => setPagoDe(null)} onGuardar={guardarPago} />
+        <PagoModal cliente={pagoDe} inicial={pagoInicial || {}} onClose={cerrarPago} onGuardar={guardarPago} />
       )}
       {formCliente !== undefined && (
         <ClienteFormModal

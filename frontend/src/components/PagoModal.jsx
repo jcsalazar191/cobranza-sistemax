@@ -2,17 +2,20 @@ import { useState, useEffect } from 'react';
 import Modal from './Modal.jsx';
 import { soles, MEDIOS, MESES_OPCIONES, periodoMeta, montoSugerido, mesesCobrados, DESCUENTO_MESES } from '../lib/ui.js';
 
-export default function PagoModal({ cliente, onClose, onGuardar }) {
-  const [meses, setMeses] = useState(periodoMeta(cliente.periodo).meses);
-  const [medio, setMedio] = useState('EFECTIVO');
-  const [fecha, setFecha] = useState(() => {
+// `inicial` (opcional) pre-llena el formulario, p.ej. desde el chat de voz.
+//   { meses, medio, fecha, comprobante, montoTotal, abono }
+export default function PagoModal({ cliente, onClose, onGuardar, inicial = {} }) {
+  const [meses, setMeses] = useState(inicial.meses ?? periodoMeta(cliente.periodo).meses);
+  const [medio, setMedio] = useState(inicial.medio ?? 'EFECTIVO');
+  const [fecha, setFecha] = useState(inicial.fecha ?? (() => {
     const d = new Date(); // fecha LOCAL (no UTC) para no correr el dia de noche en Peru
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  });
-  const [comprobante, setComprobante] = useState('');
-  const [montoTotal, setMontoTotal] = useState(Number(cliente.monto));
-  const [montoEditado, setMontoEditado] = useState(false);
-  const [abono, setAbono] = useState(false); // abono parcial: no avanza pagado_hasta
+  })());
+  const [comprobante, setComprobante] = useState(inicial.comprobante ?? '');
+  const [montoTotal, setMontoTotal] = useState(inicial.montoTotal ?? Number(cliente.monto));
+  // Si el chat ya trajo un monto, lo marcamos como "editado" para no pisarlo con la sugerencia.
+  const [montoEditado, setMontoEditado] = useState(inicial.montoTotal != null);
+  const [abono, setAbono] = useState(inicial.abono ?? false); // abono parcial: no avanza pagado_hasta
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
 

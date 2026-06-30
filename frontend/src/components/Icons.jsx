@@ -37,3 +37,12 @@ export const IconClock = (p) => (
 export const IconLogout = (p) => (
   <svg {...base} {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></svg>
 );
+export const IconMic = (p) => (
+  <svg {...base} {...p}><rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 10a7 7 0 0 0 14 0M12 17v4M8 21h8" /></svg>
+);
+export const IconSend = (p) => (
+  <svg {...base} {...p}><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z" /></svg>
+);
+export const IconCash = (p) => (
+  <svg {...base} {...p}><rect x="2" y="6" width="20" height="12" rx="2" /><circle cx="12" cy="12" r="2.5" /><path d="M6 12h.01M18 12h.01" /></svg>
+);
