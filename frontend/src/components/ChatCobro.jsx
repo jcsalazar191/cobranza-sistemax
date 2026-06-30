@@ -3,12 +3,11 @@ import Modal from './Modal.jsx';
 import { api } from '../api.js';
 import { parseCobro } from '../lib/parseCobro.js';
 import { blobToWavBase64 } from '../lib/audioWav.js';
-import { soles } from '../lib/ui.js';
-import { IconMic, IconSend, IconCash, IconPlay, IconPause, IconStop, IconPlus, IconChevron } from './Icons.jsx';
+import { soles, periodoMeta } from '../lib/ui.js';
+import { IconMic, IconSend, IconPlay, IconPause, IconStop, IconPlus, IconChevron } from './Icons.jsx';
 
 const VACIO = { cliente: null, monto: null, meses: null, abono: false, fecha: null, medio: null };
 
-// Rellena solo lo que falta, sin borrar lo ya conocido.
 function combina(prev, r) {
   return {
     cliente: r.cliente ?? prev.cliente,
@@ -28,10 +27,25 @@ function mmss(ms) {
   const s = Math.max(0, Math.round(ms / 1000));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
+function isoFecha(v) { return String(v || '').slice(0, 10); }
+
+// Payload completo para PUT/POST de cliente, partiendo del cliente enriquecido.
+function payloadCliente(c, over = {}) {
+  return {
+    nombre: c.nombre,
+    whatsapp: String(c.whatsapp),
+    monto: Number(c.monto),
+    dia_cobro: Number(c.dia_cobro) || 1,
+    pagado_hasta: isoFecha(c.pagado_hasta),
+    activo: Boolean(c.activo),
+    periodo: c.periodo || 'MENSUAL',
+    notas: c.notas || null,
+    ...over,
+  };
+}
 
 const WAVE = [8, 14, 10, 18, 12, 20, 9, 15, 11, 17, 7, 13, 19, 10, 14, 8, 16, 12, 9, 15];
 
-// Burbuja de nota de voz reproducible (estilo WhatsApp).
 function VoiceBubble({ url, durMs }) {
   const ref = useRef(null);
   const [playing, setPlaying] = useState(false);
@@ -69,13 +83,13 @@ function VoiceBubble({ url, durMs }) {
   );
 }
 
-export default function ChatCobro({ clientes, geminiConfigurado, onCobrar, onAbrirCliente, onNuevoCliente, onAbrirAjustes, onClose }) {
+export default function ChatCobro({ clientes, geminiConfigurado, onCambio, onAbrirCliente, onNuevoCliente, onAbrirAjustes, onClose }) {
   const [mensajes, setMensajes] = useState(() => [{
     from: 'bot',
     kind: 'text',
     time: hhmm(),
     text: geminiConfigurado
-      ? 'Hola 👋 Dime un cobro ("Ana me pagó 100 yape hoy"), o pídeme crear/eliminar un cliente, anular un pago, o consultar quién debe.'
+      ? 'Hola 👋 Dime un cobro ("Ana me pagó 100 yape hoy"), o pídeme crear/eliminar un cliente, anular un pago, o consultar quién debe. Lo hago al toque y te dejo un botón para deshacer.'
       : 'Para el chat necesitas tu API key de Gemini (gratis). Configúrala en Ajustes; mientras tanto puedes registrar el pago manual.',
   }]);
   const [texto, setTexto] = useState('');
@@ -84,7 +98,8 @@ export default function ChatCobro({ clientes, geminiConfigurado, onCobrar, onAbr
   const [enviando, setEnviando] = useState(false);
   const [sinKey, setSinKey] = useState(!geminiConfigurado);
   const [draft, setDraft] = useState(VACIO);
-  const [pendiente, setPendiente] = useState(null); // accion no-pago lista para abrir su pantalla
+  const [pendiente, setPendiente] = useState(null); // fallback: abrir ficha o nuevo cliente
+  const [deshacer, setDeshacer] = useState(null);    // { label, fn }
 
   const draftRef = useRef(VACIO);
   const scrollRef = useRef(null);
@@ -98,7 +113,6 @@ export default function ChatCobro({ clientes, geminiConfigurado, onCobrar, onAbr
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [mensajes, enviando]);
 
-  // Limpieza al cerrar.
   useEffect(() => () => {
     clearInterval(timerRef.current);
     try { if (mrRef.current && mrRef.current.state !== 'inactive') mrRef.current.stop(); } catch { /* noop */ }
@@ -107,7 +121,6 @@ export default function ChatCobro({ clientes, geminiConfigurado, onCobrar, onAbr
 
   function pushBot(text) { setMensajes((m) => [...m, { from: 'bot', kind: 'text', text, time: hhmm() }]); }
   function pushUser(text) { setMensajes((m) => [...m, { from: 'user', kind: 'text', text, time: hhmm() }]); }
-
   function setDraftBoth(next) { draftRef.current = next; setDraft(next); }
 
   function contextoDraft() {
@@ -122,58 +135,141 @@ export default function ChatCobro({ clientes, geminiConfigurado, onCobrar, onAbr
     return Object.keys(c).length ? c : undefined;
   }
 
-  function aplicarRespuesta(resp) {
+  // --- Ejecuciones automaticas (cada una deja un boton Deshacer) ---
+
+  async function ejecutarPago(respuestaTxt) {
+    const d = draftRef.current;
+    if (!completo(d)) {
+      pushBot(respuestaTxt || (!d.cliente ? '¿De qué cliente es el pago?' : `¿Cuánto pagó ${d.cliente.nombre}?`));
+      return;
+    }
+    const meses = d.abono ? 0 : (d.meses ?? periodoMeta(d.cliente.periodo).meses);
+    const nombre = d.cliente.nombre;
+    const monto = d.monto;
+    try {
+      const r = await api.registrarPago({
+        cliente_id: d.cliente.id, meses, medio: d.medio || 'EFECTIVO', fecha: d.fecha || undefined, monto_total: monto,
+      });
+      setDraftBoth(VACIO);
+      pushBot(respuestaTxt ? `✅ ${respuestaTxt}` : `✅ Registré ${soles(monto)} de ${nombre}.`);
+      const pid = r?.pago?.id;
+      if (pid) setDeshacer({ label: 'Deshacer pago', fn: async () => { await api.eliminarPago(pid); pushBot('Listo, anulé ese pago.'); onCambio?.(); } });
+      onCambio?.();
+    } catch (e) {
+      pushBot(`No pude registrar el pago: ${e.message}`);
+    }
+  }
+
+  async function autoRegistrarPago(resp) {
+    setDraftBoth(combina(draftRef.current, resp));
+    await ejecutarPago(resp.respuesta);
+  }
+
+  async function autoAnularPago(resp) {
+    const cid = resp.cliente?.id;
+    if (!cid) { pushBot(resp.respuesta || '¿De qué cliente anulo el pago?'); return; }
+    try {
+      const det = await api.obtenerCliente(cid);
+      const pagos = det.pagos || [];
+      if (!pagos.length) { pushBot(`${det.nombre} no tiene pagos para anular.`); return; }
+      const p = pagos[0]; // mas reciente (el backend ordena fecha DESC, id DESC)
+      await api.eliminarPago(p.id);
+      pushBot(`✅ Anulé el pago de ${soles(p.monto_total)} del ${isoFecha(p.fecha)} de ${det.nombre}.`);
+      setDeshacer({
+        label: 'Deshacer (volver a registrar)',
+        fn: async () => {
+          await api.registrarPago({ cliente_id: cid, meses: p.meses, medio: p.medio, fecha: isoFecha(p.fecha), comprobante: p.comprobante || undefined, monto_total: Number(p.monto_total) });
+          pushBot('Listo, restauré el pago.');
+          onCambio?.();
+        },
+      });
+      onCambio?.();
+    } catch (e) {
+      pushBot(`No pude anular: ${e.message}`);
+    }
+  }
+
+  async function autoToggleActivo(resp, activo) {
+    const full = clientes.find((c) => c.id === resp.cliente?.id);
+    if (!full) { pushBot(resp.respuesta || 'No identifiqué al cliente.'); return; }
+    try {
+      await api.editarCliente(full.id, payloadCliente(full, { activo }));
+      pushBot(activo ? `✅ Reactivé a ${full.nombre}.` : `✅ Di de baja a ${full.nombre}.`);
+      setDeshacer({ label: 'Deshacer', fn: async () => { await api.editarCliente(full.id, payloadCliente(full, { activo: !activo })); pushBot('Listo, lo revertí.'); onCambio?.(); } });
+      onCambio?.();
+    } catch (e) {
+      pushBot(`No pude: ${e.message}`);
+    }
+  }
+
+  async function autoCrearCliente(resp) {
+    const n = resp.nuevo_cliente || {};
+    const valido = n.nombre && /^\d{9}$/.test(String(n.whatsapp || '')) && Number(n.monto) > 0;
+    if (!valido) {
+      pushBot(resp.respuesta || 'Para crearlo necesito nombre, WhatsApp de 9 dígitos y monto. Te abro la ficha para completar.');
+      setPendiente({ tipo: 'nuevo', prefill: n });
+      return;
+    }
+    const hoy = new Date();
+    const ph = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`;
+    try {
+      const c = await api.crearCliente({
+        nombre: n.nombre, whatsapp: String(n.whatsapp), monto: Number(n.monto),
+        dia_cobro: n.dia_cobro || 1, pagado_hasta: ph, activo: true, periodo: n.periodo || 'MENSUAL', notas: null,
+      });
+      pushBot(`✅ Creé a ${n.nombre}.`);
+      if (c?.id) setDeshacer({ label: 'Deshacer', fn: async () => { await api.eliminarCliente(c.id); pushBot('Listo, lo eliminé.'); onCambio?.(); } });
+      onCambio?.();
+    } catch (e) {
+      pushBot(`No pude crear: ${e.message}. Te abro la ficha para completarlo.`);
+      setPendiente({ tipo: 'nuevo', prefill: n });
+    }
+  }
+
+  async function autoEliminarCliente(resp) {
+    const full = clientes.find((c) => c.id === resp.cliente?.id);
+    if (!full) { pushBot(resp.respuesta || 'No identifiqué al cliente.'); return; }
+    try {
+      await api.eliminarCliente(full.id);
+      pushBot(`✅ Eliminé a ${full.nombre}.`);
+      const snap = payloadCliente(full);
+      setDeshacer({ label: 'Deshacer (recrear)', fn: async () => { await api.crearCliente(snap); pushBot('Listo, lo recreé.'); onCambio?.(); } });
+      onCambio?.();
+    } catch (e) {
+      // 409 = tiene pagos -> no se borra, se da de baja desde la ficha.
+      pushBot(`No pude eliminar a ${full.nombre}: ${e.message} Te abro su ficha para darle de baja.`);
+      setPendiente({ tipo: 'ficha', cliente: { id: full.id, nombre: full.nombre } });
+    }
+  }
+
+  async function aplicarRespuesta(resp) {
     if (resp.configurado === false) {
       setSinKey(true);
       pushBot(resp.respuesta || 'Configura tu API key de Gemini en Ajustes.');
       return;
     }
     setSinKey(false);
+    setDeshacer(null);
     const accion = resp.accion || 'registrar_pago';
+    if (accion !== 'registrar_pago') setDraftBoth(VACIO);
 
-    // Pago: acumula en el borrador y muestra la confirmacion (tarjeta "Revisar y guardar").
-    if (accion === 'registrar_pago') {
-      setPendiente(null);
-      const next = combina(draftRef.current, resp);
-      setDraftBoth(next);
-      pushBot(resp.respuesta || (completo(next) ? `Listo, ${next.cliente.nombre}.` : '¿Me das un dato más?'));
-      return;
+    switch (accion) {
+      case 'registrar_pago': return autoRegistrarPago(resp);
+      case 'eliminar_pago': return autoAnularPago(resp);
+      case 'crear_cliente': return autoCrearCliente(resp);
+      case 'eliminar_cliente': return autoEliminarCliente(resp);
+      case 'baja_cliente': return autoToggleActivo(resp, false);
+      case 'reactivar_cliente': return autoToggleActivo(resp, true);
+      default: pushBot(resp.respuesta || '¿En qué te ayudo?'); return undefined;
     }
-
-    // Acciones que se resuelven abriendo la ficha del cliente (anular pago, eliminar,
-    // dar de baja, reactivar) — ahi estan los botones con su confirmacion.
-    if (['eliminar_pago', 'eliminar_cliente', 'baja_cliente', 'reactivar_cliente'].includes(accion)) {
-      setDraftBoth(VACIO);
-      pushBot(resp.respuesta);
-      setPendiente(resp.cliente ? { tipo: 'ficha', cliente: resp.cliente } : null);
-      return;
-    }
-
-    // Crear cliente: abre el formulario de nuevo cliente pre-llenado.
-    if (accion === 'crear_cliente') {
-      setDraftBoth(VACIO);
-      pushBot(resp.respuesta);
-      setPendiente({ tipo: 'nuevo', prefill: resp.nuevo_cliente || {} });
-      return;
-    }
-
-    // Consultar / ninguna: solo responde.
-    setDraftBoth(VACIO);
-    setPendiente(null);
-    pushBot(resp.respuesta || '¿En qué te ayudo?');
   }
 
-  // Fallback local (sin conexion al asistente): parser por reglas, solo texto.
-  function aplicarLocal(t) {
+  // Fallback local (asistente caido): parser por reglas + registra por el API propio.
+  async function aplicarLocal(t) {
     const p = parseCobro(t, clientes);
-    const next = combina(draftRef.current, p);
-    setDraftBoth(next);
-    const reply = !next.cliente
-      ? '¿De qué cliente es el pago?'
-      : Number(next.monto) > 0
-        ? `Anotado: ${next.cliente.nombre}, ${soles(next.monto)}. Revisa y guarda.`
-        : `¿Cuánto pagó ${next.cliente.nombre}?`;
-    pushBot(`(sin conexión al asistente) ${reply}`);
+    setDraftBoth(combina(draftRef.current, p));
+    pushBot('(sin asistente) lo interpreté localmente.');
+    await ejecutarPago();
   }
 
   async function enviarTexto(t) {
@@ -182,12 +278,13 @@ export default function ChatCobro({ clientes, geminiConfigurado, onCobrar, onAbr
     pushUser(txt);
     setTexto('');
     setPendiente(null);
+    setDeshacer(null);
     setEnviando(true);
     try {
       const resp = await api.chatCobro({ texto: txt, contexto: contextoDraft() });
-      aplicarRespuesta(resp);
+      await aplicarRespuesta(resp);
     } catch {
-      aplicarLocal(txt);
+      await aplicarLocal(txt);
     } finally {
       setEnviando(false);
     }
@@ -195,11 +292,12 @@ export default function ChatCobro({ clientes, geminiConfigurado, onCobrar, onAbr
 
   async function enviarAudio(blob) {
     setPendiente(null);
+    setDeshacer(null);
     setEnviando(true);
     try {
       const audio = await blobToWavBase64(blob);
       const resp = await api.chatCobro({ audio, contexto: contextoDraft() });
-      aplicarRespuesta(resp);
+      await aplicarRespuesta(resp);
     } catch {
       pushBot('No pude procesar el audio. Repítelo o escríbelo, por favor.');
     } finally {
@@ -241,7 +339,7 @@ export default function ChatCobro({ clientes, geminiConfigurado, onCobrar, onAbr
     timerRef.current = setInterval(() => {
       const ms = Date.now() - recStartRef.current;
       setRecMs(ms);
-      if (ms > 60000) detenerGrabacion(); // tope 60s
+      if (ms > 60000) detenerGrabacion();
     }, 100);
   }
 
@@ -252,27 +350,12 @@ export default function ChatCobro({ clientes, geminiConfigurado, onCobrar, onAbr
   }
 
   function elegirCliente(c) {
-    const next = combina(draftRef.current, { cliente: c });
-    setDraftBoth(next);
-    pushBot(completo(next)
-      ? `Perfecto, ${c.nombre}. Revisa y guarda.`
-      : `¿Cuánto pagó ${c.nombre}?`);
+    setDraftBoth(combina(draftRef.current, { cliente: c }));
+    ejecutarPago();
   }
 
-  function confirmar() {
-    const d = draftRef.current;
-    if (!completo(d)) return;
-    const inicial = { abono: d.abono };
-    if (d.monto != null) inicial.montoTotal = d.monto;
-    if (!d.abono && d.meses != null) inicial.meses = d.meses;
-    if (d.medio) inicial.medio = d.medio;
-    if (d.fecha) inicial.fecha = d.fecha;
-    onCobrar(d.cliente, inicial);
-  }
-
-  const listo = completo(draft);
   const activos = clientes.filter((c) => c.activo);
-  const mostrarChips = !draft.cliente && !enviando && mensajes.length > 1 && activos.length > 0;
+  const mostrarChips = !draft.cliente && draft.monto != null && !enviando && activos.length > 0;
 
   return (
     <Modal titulo="Cobrar por chat" onClose={onClose}>
@@ -297,7 +380,7 @@ export default function ChatCobro({ clientes, geminiConfigurado, onCobrar, onAbr
           ))}
 
           {enviando && (
-            <div className="self-start bg-slate-800 rounded-2xl rounded-bl-sm px-3 py-3" aria-label="escribiendo">
+            <div className="self-start bg-slate-800 rounded-2xl rounded-bl-sm px-3 py-3" aria-label="procesando">
               <span className="flex gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-slate-500 animate-bounce" style={{ animationDelay: '0ms' }} />
                 <span className="w-1.5 h-1.5 rounded-full bg-slate-500 animate-bounce" style={{ animationDelay: '150ms' }} />
@@ -322,23 +405,13 @@ export default function ChatCobro({ clientes, geminiConfigurado, onCobrar, onAbr
           </div>
         )}
 
-        {sinKey && (
+        {deshacer && (
           <button
             type="button"
-            onClick={onAbrirAjustes}
-            className="w-full h-11 rounded-xl bg-slate-800 border border-amber-500/40 text-amber-300 text-sm font-medium hover:bg-slate-700 transition-colors cursor-pointer"
+            onClick={async () => { const fn = deshacer.fn; setDeshacer(null); try { await fn(); } catch (e) { pushBot(`No pude deshacer: ${e.message}`); } }}
+            className="w-full h-11 rounded-xl bg-slate-800 border border-slate-600 text-slate-200 text-sm font-medium hover:bg-slate-700 transition-colors cursor-pointer active:scale-[0.98]"
           >
-            Configurar API key de Gemini en Ajustes
-          </button>
-        )}
-
-        {listo && (
-          <button
-            type="button"
-            onClick={confirmar}
-            className="w-full h-12 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 text-slate-950 font-semibold hover:bg-emerald-400 transition-transform active:scale-[0.98]"
-          >
-            <IconCash width={20} height={20} /> Revisar y guardar — {draft.cliente.nombre}
+            ↩ {deshacer.label}
           </button>
         )}
 
@@ -358,7 +431,17 @@ export default function ChatCobro({ clientes, geminiConfigurado, onCobrar, onAbr
             onClick={() => onNuevoCliente(pendiente.prefill)}
             className="w-full h-12 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 text-slate-950 font-semibold hover:bg-emerald-400 transition-transform active:scale-[0.98]"
           >
-            <IconPlus width={18} height={18} /> Crear cliente{pendiente.prefill?.nombre ? ` — ${pendiente.prefill.nombre}` : ''}
+            <IconPlus width={18} height={18} /> Completar cliente{pendiente.prefill?.nombre ? ` — ${pendiente.prefill.nombre}` : ''}
+          </button>
+        )}
+
+        {sinKey && (
+          <button
+            type="button"
+            onClick={onAbrirAjustes}
+            className="w-full h-11 rounded-xl bg-slate-800 border border-amber-500/40 text-amber-300 text-sm font-medium hover:bg-slate-700 transition-colors cursor-pointer"
+          >
+            Configurar API key de Gemini en Ajustes
           </button>
         )}
 

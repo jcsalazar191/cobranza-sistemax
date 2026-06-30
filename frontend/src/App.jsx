@@ -344,7 +344,7 @@ export default function App() {
         <ChatCobro
           clientes={clientes}
           geminiConfigurado={geminiConfigurado}
-          onCobrar={(c, inicial) => cobrarA(c, inicial)}
+          onCambio={cargar}
           onAbrirCliente={(c) => { setChatOpen(false); abrirEditar(c); }}
           onNuevoCliente={(prefill) => { setChatOpen(false); abrirNuevoPrefill(prefill); }}
           onAbrirAjustes={() => { setChatOpen(false); setConfigOpen(true); }}
