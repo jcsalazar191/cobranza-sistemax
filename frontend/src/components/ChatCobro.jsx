@@ -3,7 +3,7 @@ import Modal from './Modal.jsx';
 import { api } from '../api.js';
 import { parseCobro } from '../lib/parseCobro.js';
 import { blobToWavBase64 } from '../lib/audioWav.js';
-import { soles, periodoMeta } from '../lib/ui.js';
+import { soles } from '../lib/ui.js';
 import { IconMic, IconSend, IconPlay, IconPause, IconStop, IconPlus, IconChevron } from './Icons.jsx';
 
 const VACIO = { cliente: null, monto: null, meses: null, abono: false, fecha: null, medio: null };
@@ -143,15 +143,21 @@ export default function ChatCobro({ clientes, geminiConfigurado, onCambio, onAbr
       pushBot(respuestaTxt || (!d.cliente ? '¿De qué cliente es el pago?' : `¿Cuánto pagó ${d.cliente.nombre}?`));
       return;
     }
-    const meses = d.abono ? 0 : (d.meses ?? periodoMeta(d.cliente.periodo).meses);
+    // El backend (modelo de saldo) decide cuanta cobertura avanza segun el monto.
     const nombre = d.cliente.nombre;
     const monto = d.monto;
     try {
       const r = await api.registrarPago({
-        cliente_id: d.cliente.id, meses, medio: d.medio || 'EFECTIVO', fecha: d.fecha || undefined, monto_total: monto,
+        cliente_id: d.cliente.id, medio: d.medio || 'EFECTIVO', fecha: d.fecha || undefined, monto_total: monto,
       });
       setDraftBoth(VACIO);
-      pushBot(respuestaTxt ? `✅ ${respuestaTxt}` : `✅ Registré ${soles(monto)} de ${nombre}.`);
+      const c = r?.cliente;
+      const estado = c
+        ? (Number(c.deuda) > 0
+          ? `Aún debe ${soles(c.deuda)}.`
+          : (Number(c.saldo) > 0 ? `Al día (saldo a favor ${soles(c.saldo)}).` : 'Quedó al día.'))
+        : '';
+      pushBot(`✅ Registré ${soles(monto)} de ${nombre}. ${estado}`.trim());
       const pid = r?.pago?.id;
       if (pid) setDeshacer({ label: 'Deshacer pago', fn: async () => { await api.eliminarPago(pid); pushBot('Listo, anulé ese pago.'); onCambio?.(); } });
       onCambio?.();

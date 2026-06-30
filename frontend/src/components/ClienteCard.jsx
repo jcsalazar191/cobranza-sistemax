@@ -69,6 +69,9 @@ export default function ClienteCard({ cliente, onAbrir, onPago, onRecordar, plan
           {cliente.meses_cobertura > 0 && (
             <span className="text-slate-600"> · +{cliente.meses_cobertura} mes(es)</span>
           )}
+          {Number(cliente.saldo) > 0 && (
+            <span className="text-emerald-400/80"> · a cuenta {soles(cliente.saldo)}</span>
+          )}
         </span>
         {aviso && (
           <span className="inline-flex items-center gap-1 text-slate-500 shrink-0">

@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { query } from '../db.js';
-import { enriquecerCliente, aISODia1 } from '../logic.js';
+import {
+  enriquecerCliente, aISODia1, sumarMeses, convertirSaldo, recomputarCobertura,
+} from '../logic.js';
 import {
   reqStr, optStr, reqWhatsapp, reqNum, reqInt, reqFecha, reqBool, optEnum, ValidationError,
 } from '../validate.js';
@@ -89,28 +91,38 @@ function parseClienteBody(body) {
   };
 }
 
-// POST /api/clientes  -> crea cliente.
+// POST /api/clientes  -> crea cliente. Sin pagos: cobertura_base = pagado_hasta, saldo 0.
 clientesRouter.post('/', async (req, res, next) => {
   try {
     const c = parseClienteBody(req.body);
     const { rows } = await query(
-      `INSERT INTO clientes (nombre, whatsapp, monto, dia_cobro, pagado_hasta, activo, periodo, notas)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      `INSERT INTO clientes (nombre, whatsapp, monto, dia_cobro, pagado_hasta, cobertura_base, saldo, activo, periodo, notas)
+       VALUES ($1,$2,$3,$4,$5,$5,0,$6,$7,$8) RETURNING *`,
       [c.nombre, c.whatsapp, c.monto, c.dia_cobro, c.pagado_hasta, c.activo, c.periodo, c.notas],
     );
     res.status(201).json(enriquecerCliente(rows[0]));
   } catch (err) { next(err); }
 });
 
-// PUT /api/clientes/:id  -> edita cliente.
+// PUT /api/clientes/:id  -> edita cliente. El "pagado_hasta" que manda el usuario
+// es la cobertura deseada; calculamos cobertura_base para que el modelo de saldo
+// (con los pagos existentes) la reproduzca, y recalculamos saldo.
 clientesRouter.put('/:id', async (req, res, next) => {
   try {
     const c = parseClienteBody(req.body);
+    const { rows: sumRows } = await query(
+      'SELECT COALESCE(SUM(monto_total), 0)::float AS t FROM pagos WHERE cliente_id = $1', [req.params.id],
+    );
+    const total = Number(sumRows[0].t);
+    const adv = convertirSaldo(c.periodo, c.monto, total).mesesAvance;
+    const cobertura_base = aISODia1(sumarMeses(c.pagado_hasta, -adv));
+    const { pagado_hasta, saldo } = recomputarCobertura(cobertura_base, c.periodo, c.monto, total);
+
     const { rows } = await query(
       `UPDATE clientes SET nombre=$1, whatsapp=$2, monto=$3, dia_cobro=$4,
-              pagado_hasta=$5, activo=$6, periodo=$7, notas=$8
-       WHERE id=$9 RETURNING *`,
-      [c.nombre, c.whatsapp, c.monto, c.dia_cobro, c.pagado_hasta, c.activo, c.periodo, c.notas, req.params.id],
+              pagado_hasta=$5, cobertura_base=$6, saldo=$7, activo=$8, periodo=$9, notas=$10
+       WHERE id=$11 RETURNING *`,
+      [c.nombre, c.whatsapp, c.monto, c.dia_cobro, pagado_hasta, cobertura_base, saldo, c.activo, c.periodo, c.notas, req.params.id],
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Cliente no encontrado.' });
     res.json(enriquecerCliente(rows[0]));

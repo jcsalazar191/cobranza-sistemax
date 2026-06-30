@@ -80,7 +80,7 @@ chatCobroRouter.post('/', async (req, res, next) => {
     const { rows } = await query('SELECT * FROM clientes ORDER BY nombre');
     const clientes = rows.map((c) => enriquecerCliente(c));
     const lista = clientes
-      .map((c) => `${c.id}: ${c.nombre} | ${c.periodo} | ${c.activo ? 'activo' : 'inactivo'} | debe S/${c.deuda} (${c.meses_debe}m) | pagado hasta ${c.pagado_hasta_label}`)
+      .map((c) => `${c.id}: ${c.nombre} | ${c.periodo} | cuota S/${c.monto}/mes | ${c.activo ? 'activo' : 'inactivo'} | debe S/${c.deuda} (${c.meses_debe}m) | pagado hasta ${c.pagado_hasta_label}`)
       .join('\n');
 
     const ctx = req.body.contexto && typeof req.body.contexto === 'object' ? req.body.contexto : null;
@@ -89,7 +89,7 @@ chatCobroRouter.post('/', async (req, res, next) => {
       'Eres el asistente de cobranzas de un negocio en Peru. Interpretas un mensaje (texto o nota de voz) y decides UNA sola accion. La app SIEMPRE muestra una pantalla para confirmar; tu nunca ejecutas nada.',
       `Hoy es ${hoyLima()} (zona America/Lima).`,
       'ACCIONES (campo "accion"):',
-      '- registrar_pago: alguien pago. Llena cliente_id, monto, meses (1 si no se dice; si es abono parcial: abono=true y meses=0), fecha, medio.',
+      '- registrar_pago: alguien pago. Llena cliente_id, monto (lo que pago en soles), medio, fecha. Para "meses" (cuantos meses cubre el pago) calcula la PARTE ENTERA de (monto / cuota mensual del cliente). Ej: paga 200 y su cuota es 90 -> 2 meses. Si el monto es menor a una cuota mensual, es abono parcial: abono=true y meses=0. NUNCA uses el periodo del plan (mensual/anual) como meses; el plan NO determina cuantos meses cubre el pago.',
       '- eliminar_pago: quiere borrar/anular un pago mal hecho. Pon cliente_id (la app abrira su ficha para anular el pago correcto).',
       '- crear_cliente: quiere agregar un cliente nuevo. Llena nuevo_cliente {nombre, whatsapp (9 digitos o vacio si no se dijo), monto, periodo, dia_cobro}.',
       '- eliminar_cliente: quiere eliminar o dar de baja un cliente. Pon cliente_id.',
@@ -174,7 +174,7 @@ chatCobroRouter.post('/', async (req, res, next) => {
     res.json({
       configurado: true,
       accion,
-      cliente: cli ? { id: cli.id, nombre: cli.nombre, periodo: cli.periodo, activo: cli.activo } : null,
+      cliente: cli ? { id: cli.id, nombre: cli.nombre, periodo: cli.periodo, activo: cli.activo, monto: cli.monto } : null,
       monto,
       meses,
       abono,

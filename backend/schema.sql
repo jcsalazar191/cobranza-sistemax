@@ -20,8 +20,12 @@ CREATE TABLE clientes (
     monto         NUMERIC(10,2) NOT NULL CHECK (monto >= 0),
     -- Dia del mes en que cobra (1-31)
     dia_cobro     SMALLINT    NOT NULL DEFAULT 1 CHECK (dia_cobro BETWEEN 1 AND 31),
-    -- Ultimo mes cubierto (se guarda como el dia 1 de ese mes)
+    -- Ultimo mes cubierto (se guarda como el dia 1 de ese mes). DERIVADO: cobertura_base + bloques pagados.
     pagado_hasta  DATE        NOT NULL,
+    -- Cobertura con 0 pagos (punto de partida para recalcular con el modelo de saldo).
+    cobertura_base DATE,
+    -- Dinero pagado a cuenta que aun no completa un bloque de cobertura (baja la deuda S/ por S/).
+    saldo         NUMERIC(10,2) NOT NULL DEFAULT 0 CHECK (saldo >= 0),
     activo        BOOLEAN     NOT NULL DEFAULT TRUE,
     -- Plan de pago del cliente
     periodo       TEXT        NOT NULL DEFAULT 'MENSUAL'
