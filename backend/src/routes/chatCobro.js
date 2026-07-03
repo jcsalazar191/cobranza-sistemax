@@ -188,7 +188,7 @@ chatCobroRouter.post('/', async (req, res, next) => {
       lista || '(sin clientes)',
       `Medios validos: ${MEDIOS.join(', ')} (default EFECTIVO si no se menciona).`,
       'Reglas: fecha del pago YYYY-MM-DD ("hoy"=hoy, "ayer"=dia anterior, "el 15"=dia 15 de este mes; default hoy). faltan: "cliente" si la accion necesita cliente y cliente_id=0; "monto" si registrar_pago sin monto.',
-      'respuesta: 1-2 frases calidas en espanol peruano. Si falta un dato, pidelo amable. Si es consulta, responde el dato. Si es una accion, di que abriras la pantalla para revisar/confirmar.',
+      'respuesta: 1-2 frases calidas en espanol peruano. Si falta un dato (p.ej. crear_cliente sin whatsapp o sin cuota), PIDE ese dato puntual (ej. "Cual es el WhatsApp de X?"); NUNCA digas que "abriras una pantalla" ni "completa los datos". Si es consulta, responde el dato. Si la accion esta completa, confirmala breve.',
       'MUY IMPORTANTE: en "respuesta" y "transcript" NO uses tildes, acentos ni la letra enie (solo letras a-z), porque el audio corrompe los acentos.',
       'Devuelve UNICAMENTE un objeto JSON con estas claves: accion, cliente_id (entero), monto (numero), meses (entero), abono (bool), fecha (YYYY-MM-DD), medio, nuevo_cliente {nombre,whatsapp,monto,periodo,dia_cobro}, transcript, respuesta, faltan (lista). Sin texto fuera del JSON.',
     ];

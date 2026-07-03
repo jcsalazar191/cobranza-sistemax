@@ -40,6 +40,14 @@ function combinaCliente(prev, nc) {
 function clienteCompleto(nc) {
   return Boolean(nc && nc.nombre) && wsValido(nc?.whatsapp) && Number(nc?.monto) > 0;
 }
+// Lista legible de lo que falta de un cliente nuevo (para pedirlo en el chat).
+function faltaCliente(nc) {
+  const f = [];
+  if (!nc?.nombre) f.push('el nombre');
+  if (!wsValido(nc?.whatsapp)) f.push('el WhatsApp (9 dígitos)');
+  if (!(Number(nc?.monto) > 0)) f.push('la cuota mensual (S/)');
+  return f.join(' y ');
+}
 // Rellena whatsapp/monto que falten a partir de un texto (o transcripcion), sin
 // depender de que el modelo los ponga en el campo correcto.
 function rellenarCliente(n, txt) {
@@ -263,11 +271,8 @@ export default function ChatCobro({ clientes, geminiConfigurado, autoGrabar, onC
     if (resp.transcript) n = rellenarCliente(n, resp.transcript);
     borradorClienteRef.current = n;
     if (!clienteCompleto(n)) {
-      // Falta un dato: lo pedimos en el chat y seguimos acumulando (sin abrir formulario).
-      const falta = !n.nombre
-        ? 'el nombre'
-        : (!wsValido(n.whatsapp) ? 'el WhatsApp (9 dígitos)' : 'la cuota mensual (S/)');
-      pushBot(resp.respuesta || `Para crear el cliente me falta ${falta}. ¿Me lo dices?`);
+      // Pedimos el dato faltante EN EL CHAT (mensaje propio, claro; sin abrir formulario).
+      pushBot(`Para crear a ${n.nombre || 'ese cliente'} me falta ${faltaCliente(n)}. ¿Me lo dices?`);
       return;
     }
     borradorClienteRef.current = null;
@@ -320,8 +325,7 @@ export default function ChatCobro({ clientes, geminiConfigurado, autoGrabar, onC
       borradorClienteRef.current = null;
       crearClienteFinal(nb);
     } else {
-      const falta = !nb.nombre ? 'el nombre' : (!wsValido(nb.whatsapp) ? 'el WhatsApp (9 dígitos)' : 'la cuota mensual (S/)');
-      pushBot(`Anotado. Ahora me falta ${falta}. ¿Me lo dices?`);
+      pushBot(`Anotado. Ahora me falta ${faltaCliente(nb)}. ¿Me lo dices?`);
     }
     return true;
   }
