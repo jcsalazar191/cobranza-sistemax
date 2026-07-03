@@ -97,6 +97,18 @@ export function linkRecordatorio(cliente, plantillaDeuda, plantillaAldia) {
   return `https://wa.me/51${cliente.whatsapp}?text=${encodeURIComponent(msg)}`;
 }
 
+// Link de WhatsApp con el RECIBO de un pago. null si el whatsapp no es valido.
+export function linkRecibo(cliente, pago) {
+  if (!/^\d{9}$/.test(String(cliente?.whatsapp ?? ''))) return null;
+  const monto = fmt.format(Number(pago?.monto_total ?? pago?.monto ?? 0) || 0);
+  const fecha = String(pago?.fecha ?? '').slice(0, 10);
+  const cubierto = cliente?.pagado_hasta_label ?? '';
+  const msg = `Hola ${cliente.nombre ?? ''}, confirmamos su pago de S/ ${monto}${fecha ? ` recibido el ${fecha}` : ''}.`
+    + (cubierto ? ` Su servicio esta cubierto hasta ${cubierto}.` : '')
+    + ' Gracias por su pago!';
+  return `https://wa.me/51${cliente.whatsapp}?text=${encodeURIComponent(msg)}`;
+}
+
 // Normaliza texto para buscar: minusculas y sin tildes/diacriticos (Ñ -> n).
 export function normaliza(s) {
   return String(s ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();

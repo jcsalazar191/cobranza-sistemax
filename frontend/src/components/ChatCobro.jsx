@@ -3,8 +3,8 @@ import Modal from './Modal.jsx';
 import { api } from '../api.js';
 import { parseCobro } from '../lib/parseCobro.js';
 import { blobToWavBase64 } from '../lib/audioWav.js';
-import { soles } from '../lib/ui.js';
-import { IconMic, IconSend, IconPlay, IconPause, IconStop, IconPlus, IconChevron } from './Icons.jsx';
+import { soles, linkRecibo } from '../lib/ui.js';
+import { IconMic, IconSend, IconPlay, IconPause, IconStop, IconPlus, IconChevron, IconWhatsapp } from './Icons.jsx';
 
 const VACIO = { cliente: null, monto: null, meses: null, abono: false, fecha: null, medio: null };
 
@@ -144,6 +144,7 @@ export default function ChatCobro({ clientes, geminiConfigurado, autoGrabar, onC
   const [draft, setDraft] = useState(VACIO);
   const [pendiente, setPendiente] = useState(null); // fallback: abrir ficha o nuevo cliente
   const [deshacer, setDeshacer] = useState(null);    // { label, fn }
+  const [recibo, setRecibo] = useState(null);        // { url, nombre } tras un pago
 
   const draftRef = useRef(VACIO);
   const scrollRef = useRef(null);
@@ -216,6 +217,8 @@ export default function ChatCobro({ clientes, geminiConfigurado, autoGrabar, onC
       pushBot(`✅ Registré ${soles(monto)} de ${nombre}. ${estado}`.trim());
       const pid = r?.pago?.id;
       if (pid) setDeshacer({ label: 'Deshacer pago', fn: async () => { await api.eliminarPago(pid); pushBot('Listo, anulé ese pago.'); onCambio?.(); } });
+      const urlRecibo = linkRecibo(r?.cliente, r?.pago);
+      if (urlRecibo) setRecibo({ url: urlRecibo, nombre });
       onCambio?.();
     } catch (e) {
       pushBot(`No pude registrar el pago: ${e.message}`);
@@ -330,6 +333,27 @@ export default function ChatCobro({ clientes, geminiConfigurado, autoGrabar, onC
     return true;
   }
 
+  async function autoEditarCliente(resp) {
+    const full = clientes.find((c) => c.id === resp.cliente?.id);
+    if (!full) { pushBot(resp.respuesta || 'No identifiqué al cliente a editar.'); return; }
+    const cambios = resp.cambios && typeof resp.cambios === 'object' ? resp.cambios : null;
+    if (!cambios || !Object.keys(cambios).length) {
+      pushBot(`¿Qué le cambio a ${full.nombre}? (cuota, WhatsApp, plan o día de cobro).`);
+      return;
+    }
+    const antes = payloadCliente(full); // para deshacer
+    const etiqueta = { nombre: 'nombre', whatsapp: 'WhatsApp', monto: 'cuota', periodo: 'plan', dia_cobro: 'día de cobro' };
+    try {
+      await api.editarCliente(full.id, payloadCliente(full, cambios));
+      const desc = Object.entries(cambios).map(([k, v]) => `${etiqueta[k] || k}: ${k === 'monto' ? soles(v) : v}`).join(', ');
+      pushBot(`✅ Actualicé a ${full.nombre} — ${desc}.`);
+      setDeshacer({ label: 'Deshacer', fn: async () => { await api.editarCliente(full.id, antes); pushBot('Listo, lo revertí.'); onCambio?.(); } });
+      onCambio?.();
+    } catch (e) {
+      pushBot(`No pude editar: ${e.message}`);
+    }
+  }
+
   async function autoEliminarCliente(resp) {
     const full = clientes.find((c) => c.id === resp.cliente?.id);
     if (!full) { pushBot(resp.respuesta || 'No identifiqué al cliente.'); return; }
@@ -362,6 +386,7 @@ export default function ChatCobro({ clientes, geminiConfigurado, autoGrabar, onC
       case 'registrar_pago': return autoRegistrarPago(resp);
       case 'eliminar_pago': return autoAnularPago(resp);
       case 'crear_cliente': return autoCrearCliente(resp);
+      case 'editar_cliente': return autoEditarCliente(resp);
       case 'eliminar_cliente': return autoEliminarCliente(resp);
       case 'baja_cliente': return autoToggleActivo(resp, false);
       case 'reactivar_cliente': return autoToggleActivo(resp, true);
@@ -384,6 +409,7 @@ export default function ChatCobro({ clientes, geminiConfigurado, autoGrabar, onC
     setTexto('');
     setPendiente(null);
     setDeshacer(null);
+    setRecibo(null);
     // Si estamos completando un cliente nuevo y respondiste un dato, lo relleno local.
     if (borradorClienteRef.current && manejarRespuestaClienteNueva(txt)) return;
     setEnviando(true);
@@ -400,6 +426,7 @@ export default function ChatCobro({ clientes, geminiConfigurado, autoGrabar, onC
   async function enviarAudio(blob) {
     setPendiente(null);
     setDeshacer(null);
+    setRecibo(null);
     setEnviando(true);
     let audio;
     try {
@@ -528,6 +555,17 @@ export default function ChatCobro({ clientes, geminiConfigurado, autoGrabar, onC
           >
             ↩ {deshacer.label}
           </button>
+        )}
+
+        {recibo && (
+          <a
+            href={recibo.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full h-11 inline-flex items-center justify-center gap-2 rounded-xl bg-slate-800 border border-emerald-500/40 text-emerald-300 text-sm font-medium hover:bg-slate-700 transition-colors cursor-pointer active:scale-[0.98]"
+          >
+            <IconWhatsapp width={18} height={18} /> Enviar recibo a {recibo.nombre}
+          </a>
         )}
 
         {pendiente?.tipo === 'ficha' && (

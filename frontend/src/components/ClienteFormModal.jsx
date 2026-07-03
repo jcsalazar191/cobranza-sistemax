@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import Modal from './Modal.jsx';
-import { soles, aMonthInput, PERIODOS, periodoMeta } from '../lib/ui.js';
-import { IconTrash } from './Icons.jsx';
+import { soles, aMonthInput, PERIODOS, periodoMeta, linkRecibo } from '../lib/ui.js';
+import { IconTrash, IconWhatsapp } from './Icons.jsx';
 
 function mesActual() {
   const d = new Date();
@@ -233,6 +233,18 @@ export default function ClienteFormModal({ cliente, onClose, onGuardar, onElimin
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <span className="tabular font-semibold text-emerald-300">{soles(p.monto_total)}</span>
+                    {linkRecibo(cliente, p) && (
+                      <a
+                        href={linkRecibo(cliente, p)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="Enviar recibo por WhatsApp"
+                        title="Enviar recibo por WhatsApp"
+                        className="grid place-items-center w-8 h-8 rounded-lg text-emerald-300 hover:bg-emerald-500/15 transition-colors cursor-pointer"
+                      >
+                        <IconWhatsapp width={16} height={16} />
+                      </a>
+                    )}
                     {onAnularPago && (
                       <button
                         type="button"
