@@ -10,8 +10,10 @@ import ConfigModal from './components/ConfigModal.jsx';
 import DatosModal from './components/DatosModal.jsx';
 import CobrarPicker from './components/CobrarPicker.jsx';
 import ChatCobro from './components/ChatCobro.jsx';
+import PerfilModal from './components/PerfilModal.jsx';
+import PinLock from './components/PinLock.jsx';
 import Login from './components/Login.jsx';
-import { IconPlus, IconChat, IconDatabase, IconLogout, IconCash, IconMic } from './components/Icons.jsx';
+import { IconPlus, IconChat, IconDatabase, IconLogout, IconCash, IconMic, IconUser } from './components/Icons.jsx';
 import { PLANTILLA_DEFAULT, PLANTILLA_ALDIA_DEFAULT, normaliza } from './lib/ui.js';
 
 function pasaFiltro(c, filtro) {
@@ -47,6 +49,10 @@ export default function App() {
   const [nvidiaConfigurado, setNvidiaConfigurado] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
   const [datosOpen, setDatosOpen] = useState(false);
+  const [perfilOpen, setPerfilOpen] = useState(false);
+  const [email, setEmail] = useState('');
+  const [pinActivo, setPinActivo] = useState(null); // null=desconocido hasta cargar config
+  const [desbloqueado, setDesbloqueado] = useState(() => sessionStorage.getItem('pin_ok') === '1');
   const [formKey, setFormKey] = useState(0); // fuerza remount del form al refrescar en sitio
 
   const cargar = useCallback(async () => {
@@ -63,6 +69,7 @@ export default function App() {
       if (cfg?.mensaje_aldia) setMensajeAldia(cfg.mensaje_aldia);
       setGeminiConfigurado(Boolean(cfg?.gemini_configurado));
       setNvidiaConfigurado(Boolean(cfg?.nvidia_configurado));
+      setPinActivo(Boolean(cfg?.pin_activo));
     } catch (err) {
       setErrorCarga(err.message);
     } finally {
@@ -72,7 +79,7 @@ export default function App() {
 
   // Verifica sesion al inicio.
   useEffect(() => {
-    api.me().then(() => setAuth(true)).catch(() => setAuth(false));
+    api.me().then((r) => { setEmail(r?.email || ''); setAuth(true); }).catch(() => setAuth(false));
   }, []);
 
   // Carga datos solo cuando hay sesion.
@@ -80,6 +87,8 @@ export default function App() {
 
   async function salir() {
     try { await api.logout(); } catch { /* ignore */ }
+    sessionStorage.removeItem('pin_ok');
+    setDesbloqueado(false);
     setAuth(false);
   }
 
@@ -164,6 +173,16 @@ export default function App() {
     setConfigOpen(false);
   }
 
+  async function guardarPin(pin) {
+    const r = await api.guardarConfig({ pin });
+    setPinActivo(Boolean(r.pin_activo));
+  }
+
+  function desbloquear() {
+    sessionStorage.setItem('pin_ok', '1');
+    setDesbloqueado(true);
+  }
+
   async function eliminarCliente(cliente) {
     if (!confirm(`Eliminar a "${cliente.nombre}"? Solo se permite porque no tiene pagos. Esta accion no se puede deshacer.`)) return;
     try {
@@ -198,7 +217,14 @@ export default function App() {
     return <div className="min-h-dvh grid place-items-center text-slate-500">Cargando...</div>;
   }
   if (auth === false) {
-    return <Login onLogin={() => setAuth(true)} />;
+    return <Login onLogin={() => { desbloquear(); setAuth(true); }} />;
+  }
+  // Con sesion valida: si hay PIN configurado, pedirlo antes de mostrar la app.
+  if (pinActivo === null) {
+    return <div className="min-h-dvh grid place-items-center text-slate-500">Cargando...</div>;
+  }
+  if (pinActivo && !desbloqueado) {
+    return <PinLock onOk={desbloquear} onSalir={salir} />;
   }
 
   return (
@@ -224,6 +250,15 @@ export default function App() {
             title="Respaldo, restaurar e importar"
           >
             <IconDatabase width={18} height={18} /> Datos
+          </button>
+          <button
+            type="button"
+            onClick={() => setPerfilOpen(true)}
+            aria-label="Perfil y PIN"
+            title="Perfil (PIN de acceso)"
+            className="grid place-items-center w-10 h-10 rounded-xl bg-slate-900 border border-slate-700/60 text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors cursor-pointer"
+          >
+            <IconUser width={18} height={18} />
           </button>
           <button
             type="button"
@@ -376,6 +411,14 @@ export default function App() {
           onImportRespaldo={api.importRespaldo}
           onImportClientes={api.importClientes}
           onTerminado={cargar}
+        />
+      )}
+      {perfilOpen && (
+        <PerfilModal
+          email={email}
+          pinActivo={pinActivo}
+          onGuardarPin={guardarPin}
+          onClose={() => setPerfilOpen(false)}
         />
       )}
     </div>

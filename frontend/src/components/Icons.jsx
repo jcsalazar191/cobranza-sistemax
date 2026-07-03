@@ -55,3 +55,12 @@ export const IconPause = (p) => (
 export const IconStop = (p) => (
   <svg {...base} fill="currentColor" stroke="none" {...p}><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
 );
+export const IconLock = (p) => (
+  <svg {...base} {...p}><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
+);
+export const IconBackspace = (p) => (
+  <svg {...base} {...p}><path d="M21 5H8l-6 7 6 7h13a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1zM16 9l-4 6M12 9l4 6" /></svg>
+);
+export const IconUser = (p) => (
+  <svg {...base} {...p}><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></svg>
+);

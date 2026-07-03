@@ -37,6 +37,7 @@ export const api = {
   ingresos: (anio) => request(`/ingresos/${anio}`),
   getConfig: () => request('/config'),
   guardarConfig: (data) => request('/config', { method: 'PUT', body: JSON.stringify(data) }),
+  verificarPin: (pin) => request('/config/verificar-pin', { method: 'POST', body: JSON.stringify({ pin }) }),
   importRespaldo: (data) => request('/import', { method: 'POST', body: JSON.stringify(data) }),
   importClientes: (filas) => request('/import/clientes', { method: 'POST', body: JSON.stringify({ filas }) }),
   exportUrl: `${BASE}/export`,

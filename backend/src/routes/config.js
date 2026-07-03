@@ -1,8 +1,19 @@
+import crypto from 'node:crypto';
 import { Router } from 'express';
 import { query } from '../db.js';
-import { optStr } from '../validate.js';
+import { optStr, ValidationError } from '../validate.js';
 
 export const configRouter = Router();
+
+// PIN de acceso (4 digitos): bloqueo rapido sobre la sesion. Se guarda hasheado.
+const PIN_SECRET = process.env.SESSION_SECRET || 'cambia-este-secreto-en-produccion';
+function hashPin(pin) {
+  return crypto.createHmac('sha256', PIN_SECRET).update(String(pin)).digest('hex');
+}
+function pinIgual(a, b) {
+  const ba = Buffer.from(String(a)); const bb = Buffer.from(String(b));
+  return ba.length === bb.length && crypto.timingSafeEqual(ba, bb);
+}
 
 const DEFAULTS = {
   mensaje_template:
@@ -52,6 +63,7 @@ function publicCfg(cfg) {
     gemini_configurado: Boolean(cfg.gemini_api_key || process.env.GEMINI_API_KEY),
     gemini_model: cfg.gemini_model || GEMINI_MODEL_DEFAULT,
     nvidia_configurado: Boolean(cfg.nvidia_api_key || process.env.NVIDIA_API_KEY),
+    pin_activo: Boolean(cfg.pin_hash),
   };
 }
 
@@ -87,6 +99,14 @@ configRouter.put('/', async (req, res, next) => {
       }
     }
 
+    // PIN de acceso: 4 digitos = guardar (hasheado); '' = quitar; ausente = no tocar.
+    if (typeof req.body.pin === 'string') {
+      const pin = req.body.pin.trim();
+      if (pin === '') borrar.push('pin_hash');
+      else if (/^\d{4}$/.test(pin)) updates.pin_hash = hashPin(pin);
+      else throw new ValidationError('El PIN debe tener 4 digitos.');
+    }
+
     for (const [clave, valor] of Object.entries(updates)) {
       await query(
         `INSERT INTO config (clave, valor) VALUES ($1, $2)
@@ -97,5 +117,15 @@ configRouter.put('/', async (req, res, next) => {
     for (const clave of borrar) await query('DELETE FROM config WHERE clave = $1', [clave]);
 
     res.json(publicCfg(await cfgMap()));
+  } catch (err) { next(err); }
+});
+
+// POST /api/config/verificar-pin { pin } -> { ok }. Segundo factor sobre la sesion.
+configRouter.post('/verificar-pin', async (req, res, next) => {
+  try {
+    const pin = String(req.body?.pin ?? '').trim();
+    const cfg = await cfgMap();
+    if (!cfg.pin_hash) return res.json({ ok: true, sin_pin: true }); // no hay PIN configurado
+    res.json({ ok: pinIgual(hashPin(pin), cfg.pin_hash) });
   } catch (err) { next(err); }
 });
