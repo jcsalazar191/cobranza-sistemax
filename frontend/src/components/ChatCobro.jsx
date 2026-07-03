@@ -20,12 +20,17 @@ function combina(prev, r) {
 }
 function completo(d) { return Boolean(d.cliente) && Number(d.monto) > 0; }
 
+// WhatsApp valido: 9 digitos y no todos iguales (rechaza 000000000 inventados).
+function wsValido(w) {
+  const s = String(w || '');
+  return /^\d{9}$/.test(s) && !/^(\d)\1{8}$/.test(s);
+}
 // Acumula los datos de un cliente NUEVO entre mensajes (para pedir lo que falte).
 function combinaCliente(prev, nc) {
   const p = prev || {};
   return {
     nombre: nc.nombre || p.nombre || '',
-    whatsapp: /^\d{9}$/.test(String(nc.whatsapp || '')) ? String(nc.whatsapp) : (p.whatsapp || ''),
+    whatsapp: wsValido(nc.whatsapp) ? String(nc.whatsapp) : (p.whatsapp || ''),
     monto: Number(nc.monto) > 0 ? Number(nc.monto) : (p.monto ?? null),
     periodo: nc.periodo || p.periodo || 'MENSUAL',
     dia_cobro: nc.dia_cobro || p.dia_cobro || 1,
@@ -33,7 +38,7 @@ function combinaCliente(prev, nc) {
   };
 }
 function clienteCompleto(nc) {
-  return Boolean(nc && nc.nombre) && /^\d{9}$/.test(String(nc?.whatsapp || '')) && Number(nc?.monto) > 0;
+  return Boolean(nc && nc.nombre) && wsValido(nc?.whatsapp) && Number(nc?.monto) > 0;
 }
 function hhmm() {
   const d = new Date();
@@ -244,11 +249,16 @@ export default function ChatCobro({ clientes, geminiConfigurado, autoGrabar, onC
       // Falta un dato: lo pedimos en el chat y seguimos acumulando (sin abrir formulario).
       const falta = !n.nombre
         ? 'el nombre'
-        : (!/^\d{9}$/.test(String(n.whatsapp || '')) ? 'el WhatsApp (9 dígitos)' : 'la cuota mensual (S/)');
+        : (!wsValido(n.whatsapp) ? 'el WhatsApp (9 dígitos)' : 'la cuota mensual (S/)');
       pushBot(resp.respuesta || `Para crear el cliente me falta ${falta}. ¿Me lo dices?`);
       return;
     }
     borradorClienteRef.current = null;
+    await crearClienteFinal(n);
+  }
+
+  // Crea el cliente (y registra el pago si ya pago). Recibe datos ya completos.
+  async function crearClienteFinal(n) {
     const pagoIni = Number(n.pago_inicial) > 0 ? Number(n.pago_inicial) : 0;
     const hoy = new Date();
     const fdm = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
@@ -279,6 +289,34 @@ export default function ChatCobro({ clientes, geminiConfigurado, autoGrabar, onC
       pushBot(`No pude crear: ${e.message}. Te abro la ficha para completarlo.`);
       setPendiente({ tipo: 'nuevo', prefill: n });
     }
+  }
+
+  // Si hay un cliente nuevo en progreso y el usuario responde un dato (numero),
+  // lo rellenamos localmente (sin depender del modelo, que a veces no lo fusiona).
+  function manejarRespuestaClienteNueva(txt) {
+    const b = borradorClienteRef.current;
+    if (!b) return false;
+    const tokens = txt.replace(/[^\d.\s]/g, ' ').split(/\s+/).filter(Boolean);
+    let cambio = false;
+    if (!wsValido(b.whatsapp)) {
+      const ws = tokens.find((x) => /^\d{9}$/.test(x) && !/^(\d)\1{8}$/.test(x));
+      if (ws) { b.whatsapp = ws; cambio = true; }
+    }
+    if (!(Number(b.monto) > 0)) {
+      const m = tokens.find((x) => !/^\d{9}$/.test(x) && Number(x) > 0 && Number(x) < 1e6);
+      if (m) { b.monto = Number(m); cambio = true; }
+    }
+    if (!cambio) return false; // no parecia una respuesta de dato -> que lo intente la IA
+    borradorClienteRef.current = b;
+    if (clienteCompleto(b)) {
+      const n = b;
+      borradorClienteRef.current = null;
+      crearClienteFinal(n);
+    } else {
+      const falta = !b.nombre ? 'el nombre' : (!wsValido(b.whatsapp) ? 'el WhatsApp (9 dígitos)' : 'la cuota mensual (S/)');
+      pushBot(`Anotado. Ahora me falta ${falta}. ¿Me lo dices?`);
+    }
+    return true;
   }
 
   async function autoEliminarCliente(resp) {
@@ -335,6 +373,8 @@ export default function ChatCobro({ clientes, geminiConfigurado, autoGrabar, onC
     setTexto('');
     setPendiente(null);
     setDeshacer(null);
+    // Si estamos completando un cliente nuevo y respondiste un dato, lo relleno local.
+    if (borradorClienteRef.current && manejarRespuestaClienteNueva(txt)) return;
     setEnviando(true);
     try {
       const resp = await api.chatCobro({ texto: txt, contexto: contextoDraft() });

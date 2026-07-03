@@ -22,8 +22,9 @@ const DEFAULTS = {
     'Hola {nombre}, su servicio esta cubierto hasta {cubierto}. Le recordamos su proxima renovacion. Gracias.',
 };
 
-// flash-lite-latest: cuota gratis mucho mas alta que 2.5-flash (que tiene ~20/dia).
-const GEMINI_MODEL_DEFAULT = process.env.GEMINI_MODEL || 'gemini-flash-lite-latest';
+// gemini-flash-latest: 1500/dia gratis y mejor extraccion que flash-lite (que
+// se equivocaba creando clientes). NVIDIA cubre los 429/503 ocasionales.
+const GEMINI_MODEL_DEFAULT = process.env.GEMINI_MODEL || 'gemini-flash-latest';
 // NVIDIA NIM (OpenAI-compatible) como RESPALDO de texto cuando Gemini falla/429.
 const NVIDIA_MODEL_DEFAULT = process.env.NVIDIA_MODEL || 'qwen/qwen3-next-80b-a3b-instruct';
 const NVIDIA_BASE_URL = process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1';

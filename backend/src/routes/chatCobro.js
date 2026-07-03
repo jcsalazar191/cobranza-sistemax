@@ -159,7 +159,7 @@ chatCobroRouter.post('/', async (req, res, next) => {
       'ACCIONES (campo "accion"):',
       '- registrar_pago: alguien pago. Llena cliente_id, monto (lo que pago en soles), medio, fecha. Para "meses" (cuantos meses cubre el pago) calcula la PARTE ENTERA de (monto / cuota mensual del cliente). Ej: paga 200 y su cuota es 90 -> 2 meses. Si el monto es menor a una cuota mensual, es abono parcial: abono=true y meses=0. NUNCA uses el periodo del plan (mensual/anual) como meses; el plan NO determina cuantos meses cubre el pago.',
       '- eliminar_pago: quiere borrar/anular un pago mal hecho. Pon cliente_id (la app abrira su ficha para anular el pago correcto).',
-      '- crear_cliente: quiere agregar un cliente nuevo. Llena nuevo_cliente {nombre, whatsapp (9 digitos o vacio si no se dijo), monto, periodo, dia_cobro}. Si el usuario dice que el cliente YA pago (este mes, o un monto), pon nuevo_cliente.pago_inicial = ese monto (o la cuota mensual si dijo "ya pago este mes" sin cifra); si no menciona pago, deja pago_inicial en 0.',
+      '- crear_cliente: quiere agregar un cliente nuevo. Llena nuevo_cliente {nombre, whatsapp, monto, periodo, dia_cobro, pago_inicial}. REGLAS: whatsapp = 9 digitos REALES que dijo el usuario; si NO los dijo, whatsapp="" (vacio) y NUNCA inventes numeros (nada de 000000000 ni ceros). monto = la cuota que dijo (no la pierdas). Si dice que YA pago (este mes o un monto), pago_inicial = ese monto (o la cuota si dijo "ya pago este mes" sin cifra); si no, pago_inicial=0. Conserva SIEMPRE los datos que el usuario ya dio.',
       '- eliminar_cliente: quiere eliminar o dar de baja un cliente. Pon cliente_id.',
       '- baja_cliente: dar de baja / desactivar un cliente. Pon cliente_id.',
       '- reactivar_cliente: volver a activar un cliente inactivo. Pon cliente_id.',
@@ -226,9 +226,11 @@ chatCobroRouter.post('/', async (req, res, next) => {
     let nuevo = null;
     if (parsed.nuevo_cliente && typeof parsed.nuevo_cliente === 'object') {
       const n = parsed.nuevo_cliente;
+      const wsRaw = String(n.whatsapp || '');
+      const wsOk = /^\d{9}$/.test(wsRaw) && !/^(\d)\1{8}$/.test(wsRaw); // rechaza 000000000, etc.
       nuevo = {
         nombre: limpiarTexto(n.nombre),
-        whatsapp: /^\d{9}$/.test(String(n.whatsapp || '')) ? String(n.whatsapp) : '',
+        whatsapp: wsOk ? wsRaw : '',
         monto: Number(n.monto) > 0 ? Number(n.monto) : null,
         periodo: PERIODOS.includes(n.periodo) ? n.periodo : 'MENSUAL',
         dia_cobro: Number.isInteger(n.dia_cobro) && n.dia_cobro >= 1 && n.dia_cobro <= 31 ? n.dia_cobro : 1,
