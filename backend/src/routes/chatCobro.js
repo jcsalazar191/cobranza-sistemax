@@ -75,7 +75,7 @@ async function pedirGemini({ system, parts, model, apiKey }) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(13000), // falla rapido -> respaldo NVIDIA (texto)
+    signal: AbortSignal.timeout(10000),
   });
   if (!r.ok) {
     const e = new Error(`Gemini ${r.status}`);
@@ -86,6 +86,24 @@ async function pedirGemini({ system, parts, model, apiKey }) {
   const data = await r.json();
   const raw = (data?.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
   return JSON.parse(raw);
+}
+
+// Gemini con reintentos: el free tier da 503 (saturado) o timeouts intermitentes,
+// sobre todo con audio (que no tiene respaldo). Reintenta esos casos transitorios.
+async function pedirGeminiRobusto(args) {
+  const transitorio = (e) => e?.status === 503 || e?.status === 429
+    || /aborted|timeout|fetch failed|network/i.test(e?.message || '');
+  let ultimo;
+  for (let intento = 0; intento < 3; intento += 1) {
+    try {
+      return await pedirGemini(args);
+    } catch (e) {
+      ultimo = e;
+      if (!transitorio(e) || intento === 2) throw e;
+      await new Promise((r) => { setTimeout(r, 600); });
+    }
+  }
+  throw ultimo;
 }
 
 // Respaldo: NVIDIA NIM (OpenAI-compatible). Solo TEXTO (no transcribe audio).
@@ -193,7 +211,7 @@ chatCobroRouter.post('/', async (req, res, next) => {
     // Primario: Gemini (texto o audio). Si falla y la entrada es TEXTO, respaldo NVIDIA.
     let parsed;
     try {
-      parsed = await pedirGemini({ system, parts, model, apiKey });
+      parsed = await pedirGeminiRobusto({ system, parts, model, apiKey });
     } catch (eGemini) {
       console.error('Gemini fallo:', eGemini.status || '', eGemini.detalle || eGemini.message);
       const nv = await getNvidiaCreds();
@@ -206,9 +224,12 @@ chatCobroRouter.post('/', async (req, res, next) => {
         }
       }
       if (!parsed) {
-        const msg = eGemini.status === 429
-          ? 'El asistente llego a su limite por ahora. Espera unos minutos o escribe el cobro (igual se registra).'
-          : 'El asistente no respondio. Intenta de nuevo o usa el cobro manual.';
+        const esAudio = !texto && audio && audio.data;
+        const msg = esAudio
+          ? 'El asistente esta saturado y no pude con la nota de voz. Escribelo, por favor (el texto si funciona).'
+          : (eGemini.status === 429
+            ? 'El asistente llego a su limite por ahora. Espera unos minutos o escribe el cobro (igual se registra).'
+            : 'El asistente no respondio. Intenta de nuevo o escribe el cobro.');
         return res.status(502).json({ error: msg });
       }
     }
