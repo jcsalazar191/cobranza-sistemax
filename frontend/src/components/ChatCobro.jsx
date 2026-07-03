@@ -40,6 +40,21 @@ function combinaCliente(prev, nc) {
 function clienteCompleto(nc) {
   return Boolean(nc && nc.nombre) && wsValido(nc?.whatsapp) && Number(nc?.monto) > 0;
 }
+// Rellena whatsapp/monto que falten a partir de un texto (o transcripcion), sin
+// depender de que el modelo los ponga en el campo correcto.
+function rellenarCliente(n, txt) {
+  const tokens = String(txt || '').replace(/[^\d.\s]/g, ' ').split(/\s+/).filter(Boolean);
+  const out = { ...n };
+  if (!wsValido(out.whatsapp)) {
+    const ws = tokens.find((x) => /^\d{9}$/.test(x) && !/^(\d)\1{8}$/.test(x));
+    if (ws) out.whatsapp = ws;
+  }
+  if (!(Number(out.monto) > 0)) {
+    const m = tokens.find((x) => !/^\d{9}$/.test(x) && Number(x) > 0 && Number(x) < 1e6);
+    if (m) out.monto = Number(m);
+  }
+  return out;
+}
 function hhmm() {
   const d = new Date();
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -243,7 +258,9 @@ export default function ChatCobro({ clientes, geminiConfigurado, autoGrabar, onC
 
   async function autoCrearCliente(resp) {
     // Acumula lo que ya se dijo del cliente nuevo con lo que llega ahora.
-    const n = combinaCliente(borradorClienteRef.current, resp.nuevo_cliente || {});
+    let n = combinaCliente(borradorClienteRef.current, resp.nuevo_cliente || {});
+    // Por si el modelo no puso el dato en su campo: rellenar desde lo transcrito/dicho.
+    if (resp.transcript) n = rellenarCliente(n, resp.transcript);
     borradorClienteRef.current = n;
     if (!clienteCompleto(n)) {
       // Falta un dato: lo pedimos en el chat y seguimos acumulando (sin abrir formulario).
@@ -296,24 +313,14 @@ export default function ChatCobro({ clientes, geminiConfigurado, autoGrabar, onC
   function manejarRespuestaClienteNueva(txt) {
     const b = borradorClienteRef.current;
     if (!b) return false;
-    const tokens = txt.replace(/[^\d.\s]/g, ' ').split(/\s+/).filter(Boolean);
-    let cambio = false;
-    if (!wsValido(b.whatsapp)) {
-      const ws = tokens.find((x) => /^\d{9}$/.test(x) && !/^(\d)\1{8}$/.test(x));
-      if (ws) { b.whatsapp = ws; cambio = true; }
-    }
-    if (!(Number(b.monto) > 0)) {
-      const m = tokens.find((x) => !/^\d{9}$/.test(x) && Number(x) > 0 && Number(x) < 1e6);
-      if (m) { b.monto = Number(m); cambio = true; }
-    }
-    if (!cambio) return false; // no parecia una respuesta de dato -> que lo intente la IA
-    borradorClienteRef.current = b;
-    if (clienteCompleto(b)) {
-      const n = b;
+    const nb = rellenarCliente(b, txt);
+    if (nb.whatsapp === b.whatsapp && nb.monto === b.monto) return false; // no aporto dato -> IA
+    borradorClienteRef.current = nb;
+    if (clienteCompleto(nb)) {
       borradorClienteRef.current = null;
-      crearClienteFinal(n);
+      crearClienteFinal(nb);
     } else {
-      const falta = !b.nombre ? 'el nombre' : (!wsValido(b.whatsapp) ? 'el WhatsApp (9 dígitos)' : 'la cuota mensual (S/)');
+      const falta = !nb.nombre ? 'el nombre' : (!wsValido(nb.whatsapp) ? 'el WhatsApp (9 dígitos)' : 'la cuota mensual (S/)');
       pushBot(`Anotado. Ahora me falta ${falta}. ¿Me lo dices?`);
     }
     return true;

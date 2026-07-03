@@ -75,7 +75,7 @@ async function pedirGemini({ system, parts, model, apiKey }) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(30000),
+    signal: AbortSignal.timeout(13000), // falla rapido -> respaldo NVIDIA (texto)
   });
   if (!r.ok) {
     const e = new Error(`Gemini ${r.status}`);
@@ -100,7 +100,7 @@ async function pedirNvidia({ system, texto, creds }) {
       max_tokens: 600,
       response_format: { type: 'json_object' },
     }),
-    signal: AbortSignal.timeout(30000),
+    signal: AbortSignal.timeout(20000),
   });
   if (!r.ok) {
     const e = new Error(`NVIDIA ${r.status}`);
