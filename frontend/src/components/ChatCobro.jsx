@@ -19,6 +19,22 @@ function combina(prev, r) {
   };
 }
 function completo(d) { return Boolean(d.cliente) && Number(d.monto) > 0; }
+
+// Acumula los datos de un cliente NUEVO entre mensajes (para pedir lo que falte).
+function combinaCliente(prev, nc) {
+  const p = prev || {};
+  return {
+    nombre: nc.nombre || p.nombre || '',
+    whatsapp: /^\d{9}$/.test(String(nc.whatsapp || '')) ? String(nc.whatsapp) : (p.whatsapp || ''),
+    monto: Number(nc.monto) > 0 ? Number(nc.monto) : (p.monto ?? null),
+    periodo: nc.periodo || p.periodo || 'MENSUAL',
+    dia_cobro: nc.dia_cobro || p.dia_cobro || 1,
+    pago_inicial: Number(nc.pago_inicial) > 0 ? Number(nc.pago_inicial) : (p.pago_inicial || 0),
+  };
+}
+function clienteCompleto(nc) {
+  return Boolean(nc && nc.nombre) && /^\d{9}$/.test(String(nc?.whatsapp || '')) && Number(nc?.monto) > 0;
+}
 function hhmm() {
   const d = new Date();
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -109,6 +125,7 @@ export default function ChatCobro({ clientes, geminiConfigurado, autoGrabar, onC
   const recStartRef = useRef(0);
   const timerRef = useRef(null);
   const autoIniciado = useRef(false);
+  const borradorClienteRef = useRef(null); // cliente nuevo en construccion (datos parciales)
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
@@ -142,6 +159,7 @@ export default function ChatCobro({ clientes, geminiConfigurado, autoGrabar, onC
     if (d.abono) c.abono = true;
     if (d.fecha) c.fecha = d.fecha;
     if (d.medio) c.medio = d.medio;
+    if (borradorClienteRef.current) c.nuevo_cliente_pendiente = borradorClienteRef.current;
     return Object.keys(c).length ? c : undefined;
   }
 
@@ -219,13 +237,18 @@ export default function ChatCobro({ clientes, geminiConfigurado, autoGrabar, onC
   }
 
   async function autoCrearCliente(resp) {
-    const n = resp.nuevo_cliente || {};
-    const valido = n.nombre && /^\d{9}$/.test(String(n.whatsapp || '')) && Number(n.monto) > 0;
-    if (!valido) {
-      pushBot(resp.respuesta || 'Para crearlo necesito nombre, WhatsApp de 9 dígitos y monto. Te abro la ficha para completar.');
-      setPendiente({ tipo: 'nuevo', prefill: n });
+    // Acumula lo que ya se dijo del cliente nuevo con lo que llega ahora.
+    const n = combinaCliente(borradorClienteRef.current, resp.nuevo_cliente || {});
+    borradorClienteRef.current = n;
+    if (!clienteCompleto(n)) {
+      // Falta un dato: lo pedimos en el chat y seguimos acumulando (sin abrir formulario).
+      const falta = !n.nombre
+        ? 'el nombre'
+        : (!/^\d{9}$/.test(String(n.whatsapp || '')) ? 'el WhatsApp (9 dígitos)' : 'la cuota mensual (S/)');
+      pushBot(resp.respuesta || `Para crear el cliente me falta ${falta}. ¿Me lo dices?`);
       return;
     }
+    borradorClienteRef.current = null;
     const pagoIni = Number(n.pago_inicial) > 0 ? Number(n.pago_inicial) : 0;
     const hoy = new Date();
     const fdm = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
@@ -284,6 +307,7 @@ export default function ChatCobro({ clientes, geminiConfigurado, autoGrabar, onC
     setDeshacer(null);
     const accion = resp.accion || 'registrar_pago';
     if (accion !== 'registrar_pago') setDraftBoth(VACIO);
+    if (accion !== 'crear_cliente') borradorClienteRef.current = null;
 
     switch (accion) {
       case 'registrar_pago': return autoRegistrarPago(resp);

@@ -175,7 +175,10 @@ chatCobroRouter.post('/', async (req, res, next) => {
       'Devuelve UNICAMENTE un objeto JSON con estas claves: accion, cliente_id (entero), monto (numero), meses (entero), abono (bool), fecha (YYYY-MM-DD), medio, nuevo_cliente {nombre,whatsapp,monto,periodo,dia_cobro}, transcript, respuesta, faltan (lista). Sin texto fuera del JSON.',
     ];
     if (ctx) {
-      systemLines.push(`Datos ya conocidos de este cobro (mantenlos y completa solo lo que falte): ${JSON.stringify(ctx)}`);
+      systemLines.push(`Contexto en curso (mantenlo y completa solo lo que falte): ${JSON.stringify(ctx)}`);
+      if (ctx.nuevo_cliente_pendiente) {
+        systemLines.push('Hay un CLIENTE NUEVO en construccion (nuevo_cliente_pendiente). El mensaje del usuario seguramente aporta un dato que faltaba (whatsapp de 9 digitos, cuota/monto, etc.). Responde accion=crear_cliente y en nuevo_cliente pon el dato nuevo conservando los ya conocidos; no vuelvas a preguntar lo que ya tienes.');
+      }
     }
     const system = systemLines.join('\n');
 
