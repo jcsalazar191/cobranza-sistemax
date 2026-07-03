@@ -138,6 +138,18 @@ chatCobroRouter.post('/', async (req, res, next) => {
       .map((c) => `${c.id}: ${c.nombre} | ${c.periodo} | cuota S/${c.monto}/mes | ${c.activo ? 'activo' : 'inactivo'} | debe S/${c.deuda} (${c.meses_debe}m) | pagado hasta ${c.pagado_hasta_label}`)
       .join('\n');
 
+    // Totales YA calculados por el codigo (para que el asistente NO sume a mano
+    // y de cifras erroneas en consultas de totales).
+    const activos = clientes.filter((c) => c.activo);
+    const totDeuda = Number(activos.reduce((s, c) => s + Number(c.deuda), 0).toFixed(2));
+    const totIngreso = Number(activos.reduce((s, c) => s + Number(c.monto), 0).toFixed(2));
+    const morosos = activos.filter((c) => c.meses_debe >= 1).length;
+    const criticos = activos.filter((c) => c.estado === 3).length;
+    const { rows: cobRows } = await query(
+      "SELECT COALESCE(SUM(monto_total), 0)::float AS t FROM pagos WHERE date_trunc('month', fecha) = date_trunc('month', CURRENT_DATE)",
+    );
+    const cobradoMes = Number(Number(cobRows[0].t).toFixed(2));
+
     const ctx = req.body.contexto && typeof req.body.contexto === 'object' ? req.body.contexto : null;
 
     const systemLines = [
@@ -152,6 +164,7 @@ chatCobroRouter.post('/', async (req, res, next) => {
       '- reactivar_cliente: volver a activar un cliente inactivo. Pon cliente_id.',
       '- consultar: pregunta por deudas, estado o quien debe. Responde con los datos de la lista. No cambia nada.',
       '- ninguna: saludo o no entendiste; pide que aclare.',
+      `TOTALES ya calculados por el sistema (usa estas cifras EXACTAS para preguntas de totales/resumen; NUNCA las sumes tu): deuda total S/${totDeuda}, clientes activos ${activos.length}, morosos ${morosos}, criticos ${criticos}, ingreso mensual esperado S/${totIngreso}, cobrado este mes S/${cobradoMes}.`,
       'CLIENTES (usa el id EXACTO de esta lista; si no identificas a ninguno pon cliente_id=0):',
       lista || '(sin clientes)',
       `Medios validos: ${MEDIOS.join(', ')} (default EFECTIVO si no se menciona).`,
