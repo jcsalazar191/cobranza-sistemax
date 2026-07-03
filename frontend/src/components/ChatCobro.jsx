@@ -83,7 +83,7 @@ function VoiceBubble({ url, durMs }) {
   );
 }
 
-export default function ChatCobro({ clientes, geminiConfigurado, onCambio, onAbrirCliente, onNuevoCliente, onAbrirAjustes, onClose }) {
+export default function ChatCobro({ clientes, geminiConfigurado, autoGrabar, onCambio, onAbrirCliente, onNuevoCliente, onAbrirAjustes, onClose }) {
   const [mensajes, setMensajes] = useState(() => [{
     from: 'bot',
     kind: 'text',
@@ -108,6 +108,7 @@ export default function ChatCobro({ clientes, geminiConfigurado, onCambio, onAbr
   const streamRef = useRef(null);
   const recStartRef = useRef(0);
   const timerRef = useRef(null);
+  const autoIniciado = useRef(false);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
@@ -118,6 +119,15 @@ export default function ChatCobro({ clientes, geminiConfigurado, onCambio, onAbr
     try { if (mrRef.current && mrRef.current.state !== 'inactive') mrRef.current.stop(); } catch { /* noop */ }
     streamRef.current?.getTracks().forEach((t) => t.stop());
   }, []);
+
+  // Si se abrio tocando el microfono, empieza a grabar solo (un solo toque).
+  useEffect(() => {
+    if (autoGrabar && !autoIniciado.current) {
+      autoIniciado.current = true;
+      iniciarGrabacion();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoGrabar]);
 
   function pushBot(text) { setMensajes((m) => [...m, { from: 'bot', kind: 'text', text, time: hhmm() }]); }
   function pushUser(text) { setMensajes((m) => [...m, { from: 'user', kind: 'text', text, time: hhmm() }]); }

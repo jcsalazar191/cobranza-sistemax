@@ -238,18 +238,20 @@ export default function App() {
           <button
             type="button"
             onClick={() => setConfigOpen(true)}
-            className="inline-flex items-center gap-1.5 h-10 px-3 rounded-xl bg-slate-900 border border-slate-700/60 text-sm text-slate-300 hover:bg-slate-800 transition-colors cursor-pointer"
-            title="Personalizar mensaje de recordatorio"
+            aria-label="Mensajes y asistente"
+            title="Mensajes de recordatorio y asistente (IA)"
+            className="grid place-items-center w-10 h-10 rounded-xl bg-slate-900 border border-slate-700/60 text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors cursor-pointer"
           >
-            <IconChat width={18} height={18} /> Mensaje
+            <IconChat width={18} height={18} />
           </button>
           <button
             type="button"
             onClick={() => setDatosOpen(true)}
-            className="inline-flex items-center gap-1.5 h-10 px-3 rounded-xl bg-slate-900 border border-slate-700/60 text-sm text-slate-300 hover:bg-slate-800 transition-colors cursor-pointer"
+            aria-label="Datos"
             title="Respaldo, restaurar e importar"
+            className="grid place-items-center w-10 h-10 rounded-xl bg-slate-900 border border-slate-700/60 text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors cursor-pointer"
           >
-            <IconDatabase width={18} height={18} /> Datos
+            <IconDatabase width={18} height={18} />
           </button>
           <button
             type="button"
@@ -384,6 +386,7 @@ export default function App() {
         <ChatCobro
           clientes={clientes}
           geminiConfigurado={geminiConfigurado}
+          autoGrabar
           onCambio={cargar}
           onAbrirCliente={(c) => { setChatOpen(false); abrirEditar(c); }}
           onNuevoCliente={(prefill) => { setChatOpen(false); abrirNuevoPrefill(prefill); }}
