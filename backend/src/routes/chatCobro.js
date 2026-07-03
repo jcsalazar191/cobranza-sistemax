@@ -47,6 +47,7 @@ const RESPONSE_SCHEMA = {
         monto: { type: 'number' },
         periodo: { type: 'string', enum: PERIODOS },
         dia_cobro: { type: 'integer' },
+        pago_inicial: { type: 'number' },
       },
     },
     transcript: { type: 'string' },
@@ -158,7 +159,7 @@ chatCobroRouter.post('/', async (req, res, next) => {
       'ACCIONES (campo "accion"):',
       '- registrar_pago: alguien pago. Llena cliente_id, monto (lo que pago en soles), medio, fecha. Para "meses" (cuantos meses cubre el pago) calcula la PARTE ENTERA de (monto / cuota mensual del cliente). Ej: paga 200 y su cuota es 90 -> 2 meses. Si el monto es menor a una cuota mensual, es abono parcial: abono=true y meses=0. NUNCA uses el periodo del plan (mensual/anual) como meses; el plan NO determina cuantos meses cubre el pago.',
       '- eliminar_pago: quiere borrar/anular un pago mal hecho. Pon cliente_id (la app abrira su ficha para anular el pago correcto).',
-      '- crear_cliente: quiere agregar un cliente nuevo. Llena nuevo_cliente {nombre, whatsapp (9 digitos o vacio si no se dijo), monto, periodo, dia_cobro}.',
+      '- crear_cliente: quiere agregar un cliente nuevo. Llena nuevo_cliente {nombre, whatsapp (9 digitos o vacio si no se dijo), monto, periodo, dia_cobro}. Si el usuario dice que el cliente YA pago (este mes, o un monto), pon nuevo_cliente.pago_inicial = ese monto (o la cuota mensual si dijo "ya pago este mes" sin cifra); si no menciona pago, deja pago_inicial en 0.',
       '- eliminar_cliente: quiere eliminar o dar de baja un cliente. Pon cliente_id.',
       '- baja_cliente: dar de baja / desactivar un cliente. Pon cliente_id.',
       '- reactivar_cliente: volver a activar un cliente inactivo. Pon cliente_id.',
@@ -228,6 +229,7 @@ chatCobroRouter.post('/', async (req, res, next) => {
         monto: Number(n.monto) > 0 ? Number(n.monto) : null,
         periodo: PERIODOS.includes(n.periodo) ? n.periodo : 'MENSUAL',
         dia_cobro: Number.isInteger(n.dia_cobro) && n.dia_cobro >= 1 && n.dia_cobro <= 31 ? n.dia_cobro : 1,
+        pago_inicial: Number(n.pago_inicial) > 0 ? Number(n.pago_inicial) : 0,
       };
     }
 

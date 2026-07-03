@@ -226,15 +226,31 @@ export default function ChatCobro({ clientes, geminiConfigurado, autoGrabar, onC
       setPendiente({ tipo: 'nuevo', prefill: n });
       return;
     }
+    const pagoIni = Number(n.pago_inicial) > 0 ? Number(n.pago_inicial) : 0;
     const hoy = new Date();
-    const ph = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`;
+    const fdm = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+    // Si ya pago, lo creamos cubierto hasta el mes ANTERIOR y registramos el pago
+    // (queda un pago real + al dia). Si no, cubierto hasta este mes.
+    const phInicial = pagoIni ? fdm(new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1)) : fdm(hoy);
     try {
       const c = await api.crearCliente({
         nombre: n.nombre, whatsapp: String(n.whatsapp), monto: Number(n.monto),
-        dia_cobro: n.dia_cobro || 1, pagado_hasta: ph, activo: true, periodo: n.periodo || 'MENSUAL', notas: null,
+        dia_cobro: n.dia_cobro || 1, pagado_hasta: phInicial, activo: true, periodo: n.periodo || 'MENSUAL', notas: null,
       });
-      pushBot(`✅ Creé a ${n.nombre}.`);
-      if (c?.id) setDeshacer({ label: 'Deshacer', fn: async () => { await api.eliminarCliente(c.id); pushBot('Listo, lo eliminé.'); onCambio?.(); } });
+      if (pagoIni && c?.id) {
+        const rp = await api.registrarPago({ cliente_id: c.id, monto_total: pagoIni });
+        const cli = rp?.cliente;
+        const estado = cli ? (Number(cli.deuda) > 0 ? `Aún debe ${soles(cli.deuda)}.` : 'Quedó al día.') : '';
+        pushBot(`✅ Creé a ${n.nombre} y registré su pago de ${soles(pagoIni)}. ${estado}`.trim());
+        const pid = rp?.pago?.id;
+        setDeshacer({
+          label: 'Deshacer',
+          fn: async () => { if (pid) await api.eliminarPago(pid); await api.eliminarCliente(c.id); pushBot('Listo, deshice todo.'); onCambio?.(); },
+        });
+      } else {
+        pushBot(`✅ Creé a ${n.nombre}.`);
+        if (c?.id) setDeshacer({ label: 'Deshacer', fn: async () => { await api.eliminarCliente(c.id); pushBot('Listo, lo eliminé.'); onCambio?.(); } });
+      }
       onCambio?.();
     } catch (e) {
       pushBot(`No pude crear: ${e.message}. Te abro la ficha para completarlo.`);
