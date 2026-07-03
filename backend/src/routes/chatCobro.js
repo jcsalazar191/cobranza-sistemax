@@ -50,16 +50,11 @@ const RESPONSE_SCHEMA = {
         pago_inicial: { type: 'number' },
       },
     },
-    cambios: {
-      type: 'object',
-      properties: {
-        nombre: { type: 'string' },
-        whatsapp: { type: 'string' },
-        monto: { type: 'number' },
-        periodo: { type: 'string', enum: PERIODOS },
-        dia_cobro: { type: 'integer' },
-      },
-    },
+    edit_nombre: { type: 'string' },
+    edit_whatsapp: { type: 'string' },
+    edit_monto: { type: 'number' },
+    edit_periodo: { type: 'string', enum: PERIODOS },
+    edit_dia_cobro: { type: 'integer' },
     transcript: { type: 'string' },
     respuesta: { type: 'string' },
     faltan: { type: 'array', items: { type: 'string' } },
@@ -188,7 +183,7 @@ chatCobroRouter.post('/', async (req, res, next) => {
       '- registrar_pago: alguien pago. Llena cliente_id, monto (lo que pago en soles), medio, fecha. Para "meses" (cuantos meses cubre el pago) calcula la PARTE ENTERA de (monto / cuota mensual del cliente). Ej: paga 200 y su cuota es 90 -> 2 meses. Si el monto es menor a una cuota mensual, es abono parcial: abono=true y meses=0. NUNCA uses el periodo del plan (mensual/anual) como meses; el plan NO determina cuantos meses cubre el pago.',
       '- eliminar_pago: quiere borrar/anular un pago mal hecho. Pon cliente_id (la app abrira su ficha para anular el pago correcto).',
       '- crear_cliente: quiere agregar un cliente nuevo. Llena nuevo_cliente {nombre, whatsapp, monto, periodo, dia_cobro, pago_inicial}. REGLAS: whatsapp = 9 digitos REALES que dijo el usuario; si NO los dijo, whatsapp="" (vacio) y NUNCA inventes numeros (nada de 000000000 ni ceros). monto = la cuota que dijo (no la pierdas). Si dice que YA pago (este mes o un monto), pago_inicial = ese monto (o la cuota si dijo "ya pago este mes" sin cifra); si no, pago_inicial=0. Conserva SIEMPRE los datos que el usuario ya dio.',
-      '- editar_cliente: quiere CAMBIAR datos de un cliente existente (cuota/monto, whatsapp, plan/periodo, dia de cobro, nombre). Pon cliente_id y "cambios" SOLO con los campos que cambian (ej. cambios={monto:90}). No incluyas lo que no cambia.',
+      '- editar_cliente: quiere CAMBIAR datos de un cliente existente. Pon cliente_id y SOLO el/los campos que cambian con prefijo edit_: edit_monto (nueva cuota), edit_whatsapp, edit_periodo, edit_dia_cobro, edit_nombre. Ej: "subele la cuota a 90" -> edit_monto=90. No pongas los que no cambian.',
       '- eliminar_cliente: quiere eliminar o dar de baja un cliente. Pon cliente_id.',
       '- baja_cliente: dar de baja / desactivar un cliente. Pon cliente_id.',
       '- reactivar_cliente: volver a activar un cliente inactivo. Pon cliente_id.',
@@ -271,15 +266,14 @@ chatCobroRouter.post('/', async (req, res, next) => {
     }
 
     let cambios = null;
-    if (parsed.cambios && typeof parsed.cambios === 'object') {
-      const cm = parsed.cambios;
+    {
       const c2 = {};
-      if (typeof cm.nombre === 'string' && cm.nombre.trim()) c2.nombre = limpiarTexto(cm.nombre);
-      const wsc = String(cm.whatsapp || '');
+      if (typeof parsed.edit_nombre === 'string' && parsed.edit_nombre.trim()) c2.nombre = limpiarTexto(parsed.edit_nombre);
+      const wsc = String(parsed.edit_whatsapp || '');
       if (/^\d{9}$/.test(wsc) && !/^(\d)\1{8}$/.test(wsc)) c2.whatsapp = wsc;
-      if (Number(cm.monto) > 0) c2.monto = Number(cm.monto);
-      if (PERIODOS.includes(cm.periodo)) c2.periodo = cm.periodo;
-      if (Number.isInteger(cm.dia_cobro) && cm.dia_cobro >= 1 && cm.dia_cobro <= 31) c2.dia_cobro = cm.dia_cobro;
+      if (Number(parsed.edit_monto) > 0) c2.monto = Number(parsed.edit_monto);
+      if (PERIODOS.includes(parsed.edit_periodo)) c2.periodo = parsed.edit_periodo;
+      if (Number.isInteger(parsed.edit_dia_cobro) && parsed.edit_dia_cobro >= 1 && parsed.edit_dia_cobro <= 31) c2.dia_cobro = parsed.edit_dia_cobro;
       if (Object.keys(c2).length) cambios = c2;
     }
 
