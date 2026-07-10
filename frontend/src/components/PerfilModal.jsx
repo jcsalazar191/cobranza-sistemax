@@ -3,12 +3,22 @@ import Modal from './Modal.jsx';
 import { IconLock } from './Icons.jsx';
 
 // Perfil: configurar el PIN de acceso de 4 digitos (bloqueo rapido al abrir la app).
-export default function PerfilModal({ email, pinActivo, onClose, onGuardarPin }) {
+export default function PerfilModal({ email, pinActivo, diaGracia, onClose, onGuardarPin, onGuardarDiaGracia }) {
   const [pin, setPin] = useState('');
   const [pin2, setPin2] = useState('');
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
+  const [dg, setDg] = useState(diaGracia || 10);
+  const [guardandoDg, setGuardandoDg] = useState(false);
+  const [dgMsg, setDgMsg] = useState('');
+
+  async function guardarDg() {
+    const n = Number(dg);
+    if (!Number.isInteger(n) || n < 1 || n > 28) { setDgMsg('Debe ser entre 1 y 28.'); return; }
+    setDgMsg(''); setGuardandoDg(true);
+    try { await onGuardarDiaGracia(n); setDgMsg('Guardado ✓'); } catch (e) { setDgMsg(e.message); } finally { setGuardandoDg(false); }
+  }
 
   const soloDigitos = (v) => v.replace(/\D/g, '').slice(0, 4);
 
@@ -69,6 +79,27 @@ export default function PerfilModal({ email, pinActivo, onClose, onGuardarPin })
             <span className="text-slate-200">{email}</span>
           </div>
         )}
+
+        <div className="rounded-xl bg-slate-800/60 border border-slate-700/60 px-4 py-3 space-y-2">
+          <p className="text-sm font-medium text-slate-200">Día de plazo de pago</p>
+          <p className="text-xs text-slate-500">
+            Hasta ese día del mes, el mes en curso aún NO cuenta como vencido (cobras por adelantado). Ej: 5 = tienen plazo hasta el 5.
+          </p>
+          <div className="flex items-center gap-2">
+            <input
+              type="number" min="1" max="28" inputMode="numeric"
+              value={dg} onChange={(e) => setDg(e.target.value)}
+              className="w-20 h-11 px-3 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 text-center tabular focus:outline-none focus:ring-2 focus:ring-emerald-500/60"
+            />
+            <button
+              type="button" onClick={guardarDg} disabled={guardandoDg}
+              className="h-11 px-4 rounded-xl bg-emerald-500 text-slate-950 font-semibold text-sm hover:bg-emerald-400 transition-colors cursor-pointer disabled:opacity-60"
+            >
+              {guardandoDg ? 'Guardando...' : 'Guardar'}
+            </button>
+            {dgMsg && <span className="text-xs text-slate-400">{dgMsg}</span>}
+          </div>
+        </div>
 
         <div className="flex items-start gap-3 rounded-xl bg-slate-800/60 border border-slate-700/60 px-4 py-3">
           <span className="text-emerald-400 mt-0.5"><IconLock width={20} height={20} /></span>

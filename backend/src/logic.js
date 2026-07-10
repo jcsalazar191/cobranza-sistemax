@@ -35,16 +35,22 @@ export function etiquetaMes(fecha) {
   return `${MESES[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-// Se cobra POR ADELANTADO con plazo hasta el dia 10 de cada mes.
-// Hasta el dia 10 el mes en curso todavia esta "en plazo" (no vencido).
-export const DIA_GRACIA = 10;
+// Se cobra POR ADELANTADO con plazo hasta un "dia de gracia" de cada mes.
+// Hasta ese dia (inclusive) el mes en curso todavia esta "en plazo" (no vencido).
+// Es CONFIGURABLE desde Perfil (se guarda en config y se sincroniza aca).
+let diaGraciaActual = Number(process.env.DIA_GRACIA) > 0 ? Number(process.env.DIA_GRACIA) : 10;
+export function getDiaGracia() { return diaGraciaActual; }
+export function setDiaGracia(n) {
+  const v = Number(n);
+  if (Number.isInteger(v) && v >= 1 && v <= 28) diaGraciaActual = v;
+}
 
 // Meses que debe un cliente.
 // pagado_hasta cubre HASTA ese mes inclusive. El "mes objetivo" (ultimo mes que
 // ya debio estar pagado) es el mes actual, salvo que estemos dentro del plazo
-// (dia <= DIA_GRACIA), en cuyo caso el mes en curso aun no cuenta y el objetivo
+// (dia <= diaGracia), en cuyo caso el mes en curso aun no cuenta y el objetivo
 // es el mes anterior.
-export function mesesDebe(pagadoHasta, hoy = new Date(), diaGracia = DIA_GRACIA) {
+export function mesesDebe(pagadoHasta, hoy = new Date(), diaGracia = diaGraciaActual) {
   const ph = aPrimerDiaMes(pagadoHasta);
   const objetivo = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
   if (hoy.getDate() <= diaGracia) {

@@ -13,7 +13,7 @@ import { pagosRouter } from './routes/pagos.js';
 import { exportRouter } from './routes/export.js';
 import { importRouter } from './routes/import.js';
 import { ingresosRouter } from './routes/ingresos.js';
-import { configRouter } from './routes/config.js';
+import { configRouter, cargarDiaGracia } from './routes/config.js';
 import { recordatoriosRouter } from './routes/recordatorios.js';
 import { chatCobroRouter } from './routes/chatCobro.js';
 
@@ -88,4 +88,5 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`API cobranza escuchando en http://localhost:${PORT}`);
+  cargarDiaGracia(); // sincroniza el dia de plazo guardado
 });

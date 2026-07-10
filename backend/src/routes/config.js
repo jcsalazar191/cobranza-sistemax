@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { Router } from 'express';
 import { query } from '../db.js';
 import { optStr, ValidationError } from '../validate.js';
+import { setDiaGracia, getDiaGracia } from '../logic.js';
 
 export const configRouter = Router();
 
@@ -32,6 +33,15 @@ const NVIDIA_BASE_URL = process.env.NVIDIA_BASE_URL || 'https://integrate.api.nv
 async function cfgMap() {
   const { rows } = await query('SELECT clave, valor FROM config');
   return Object.fromEntries(rows.map((r) => [r.clave, r.valor]));
+}
+
+// Sincroniza el "dia de plazo" (dia_gracia) desde la config hacia logic.js.
+// Se llama al arrancar (index.js) y tras guardarlo.
+export async function cargarDiaGracia() {
+  try {
+    const cfg = await cfgMap();
+    if (cfg.dia_gracia) setDiaGracia(Number(cfg.dia_gracia));
+  } catch { /* usa el default */ }
 }
 
 // Credenciales de Gemini para el chat. La key vive en la BD (la pone cada quien
@@ -65,6 +75,7 @@ function publicCfg(cfg) {
     gemini_model: cfg.gemini_model || GEMINI_MODEL_DEFAULT,
     nvidia_configurado: Boolean(cfg.nvidia_api_key || process.env.NVIDIA_API_KEY),
     pin_activo: Boolean(cfg.pin_hash),
+    dia_gracia: Number(cfg.dia_gracia) > 0 ? Number(cfg.dia_gracia) : getDiaGracia(),
   };
 }
 
@@ -98,6 +109,14 @@ configRouter.put('/', async (req, res, next) => {
         if (k) updates[campo] = k;
         else borrar.push(campo);
       }
+    }
+
+    // Dia de plazo (gracia): hasta ese dia del mes el mes en curso no cuenta como vencido.
+    if (req.body.dia_gracia !== undefined && req.body.dia_gracia !== '') {
+      const dg = Number(req.body.dia_gracia);
+      if (!Number.isInteger(dg) || dg < 1 || dg > 28) throw new ValidationError('El dia de plazo debe ser un numero entre 1 y 28.');
+      updates.dia_gracia = String(dg);
+      setDiaGracia(dg);
     }
 
     // PIN de acceso: 4 digitos = guardar (hasheado); '' = quitar; ausente = no tocar.

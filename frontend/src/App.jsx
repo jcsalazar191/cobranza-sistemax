@@ -52,6 +52,7 @@ export default function App() {
   const [perfilOpen, setPerfilOpen] = useState(false);
   const [email, setEmail] = useState('');
   const [pinActivo, setPinActivo] = useState(null); // null=desconocido hasta cargar config
+  const [diaGracia, setDiaGracia] = useState(10);   // dia de plazo de pago (configurable)
   const [desbloqueado, setDesbloqueado] = useState(() => sessionStorage.getItem('pin_ok') === '1');
   const [formKey, setFormKey] = useState(0); // fuerza remount del form al refrescar en sitio
 
@@ -70,6 +71,7 @@ export default function App() {
       setGeminiConfigurado(Boolean(cfg?.gemini_configurado));
       setNvidiaConfigurado(Boolean(cfg?.nvidia_configurado));
       setPinActivo(Boolean(cfg?.pin_activo));
+      if (cfg?.dia_gracia) setDiaGracia(Number(cfg.dia_gracia));
     } catch (err) {
       setErrorCarga(err.message);
     } finally {
@@ -176,6 +178,12 @@ export default function App() {
   async function guardarPin(pin) {
     const r = await api.guardarConfig({ pin });
     setPinActivo(Boolean(r.pin_activo));
+  }
+
+  async function guardarDiaGracia(n) {
+    const r = await api.guardarConfig({ dia_gracia: n });
+    if (r?.dia_gracia) setDiaGracia(Number(r.dia_gracia));
+    await cargar(); // recalcula deudas con el nuevo plazo
   }
 
   function desbloquear() {
@@ -420,7 +428,9 @@ export default function App() {
         <PerfilModal
           email={email}
           pinActivo={pinActivo}
+          diaGracia={diaGracia}
           onGuardarPin={guardarPin}
+          onGuardarDiaGracia={guardarDiaGracia}
           onClose={() => setPerfilOpen(false)}
         />
       )}
