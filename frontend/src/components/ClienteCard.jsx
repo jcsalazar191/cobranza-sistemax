@@ -8,9 +8,8 @@ export default function ClienteCard({ cliente, onAbrir, onPago, onRecordar, plan
   const aviso = haceDias(cliente.ultimo_recordatorio);
   // Por vencer: al dia pero solo cubierto hasta este mes.
   const porVencer = cliente.activo && cliente.deuda === 0 && cliente.meses_cobertura === 0;
-  // Recordar tiene sentido solo si debe (cobro) o esta por vencer (renovacion).
-  // Si esta al dia CON cobertura por delante, no hay nada que recordar.
-  const mostrarRecordar = Number(cliente.deuda) > 0 || porVencer;
+  // Recordar solo si DEBE (cobro). Si esta al dia o por vencer, no se muestra.
+  const mostrarRecordar = Number(cliente.deuda) > 0;
 
   // Semestral/anual con deuda: se cobra el periodo completo -> badge del plan en color fuerte
   // (no el "1 MES" amarillo, que se veia leve aunque deba todo el periodo).
