@@ -8,6 +8,9 @@ export default function ClienteCard({ cliente, onAbrir, onPago, onRecordar, plan
   const aviso = haceDias(cliente.ultimo_recordatorio);
   // Por vencer: al dia pero solo cubierto hasta este mes.
   const porVencer = cliente.activo && cliente.deuda === 0 && cliente.meses_cobertura === 0;
+  // Recordar tiene sentido solo si debe (cobro) o esta por vencer (renovacion).
+  // Si esta al dia CON cobertura por delante, no hay nada que recordar.
+  const mostrarRecordar = Number(cliente.deuda) > 0 || porVencer;
 
   // Semestral/anual con deuda: se cobra el periodo completo -> badge del plan en color fuerte
   // (no el "1 MES" amarillo, que se veia leve aunque deba todo el periodo).
@@ -80,7 +83,7 @@ export default function ClienteCard({ cliente, onAbrir, onPago, onRecordar, plan
         )}
       </p>
 
-      <div className="mt-3 grid grid-cols-2 gap-2" onClick={(e) => e.stopPropagation()}>
+      <div className={`mt-3 grid gap-2 ${mostrarRecordar ? 'grid-cols-2' : 'grid-cols-1'}`} onClick={(e) => e.stopPropagation()}>
         <button
           type="button"
           onClick={() => onPago(cliente)}
@@ -88,7 +91,7 @@ export default function ClienteCard({ cliente, onAbrir, onPago, onRecordar, plan
         >
           <IconCheck width={18} height={18} /> Registre pago
         </button>
-        {link ? (
+        {mostrarRecordar && (link ? (
           <a
             href={link}
             target="_blank"
@@ -107,7 +110,7 @@ export default function ClienteCard({ cliente, onAbrir, onPago, onRecordar, plan
           >
             <IconWhatsapp width={18} height={18} /> Sin WhatsApp
           </button>
-        )}
+        ))}
       </div>
     </article>
   );
