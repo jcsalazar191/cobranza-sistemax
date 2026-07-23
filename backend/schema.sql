@@ -28,6 +28,9 @@ CREATE TABLE clientes (
     cobertura_base DATE,
     -- Dinero pagado a cuenta que aun no completa un bloque de cobertura (baja la deuda S/ por S/).
     saldo         NUMERIC(10,2) NOT NULL DEFAULT 0 CHECK (saldo >= 0),
+    -- Dinero ya "sellado" en cobertura_base a una tarifa anterior (al cambiar la cuota).
+    -- Solo el dinero por encima de esto se convierte a la tarifa actual (no re-valora lo pagado).
+    dinero_aplicado NUMERIC(10,2) NOT NULL DEFAULT 0,
     activo        BOOLEAN     NOT NULL DEFAULT TRUE,
     -- Plan de pago del cliente
     periodo       TEXT        NOT NULL DEFAULT 'MENSUAL'

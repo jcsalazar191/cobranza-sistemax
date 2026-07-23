@@ -42,9 +42,10 @@ pagosRouter.post('/', async (req, res, next) => {
     );
     const oldTotal = Number(sumRows[0].t);
     const newTotal = Number((oldTotal + monto_total).toFixed(2));
+    const aplicado = Number(cli.dinero_aplicado) || 0; // dinero sellado a tarifa anterior
     // Meses que avanza ESTE pago (para el historial): diferencia de cobertura.
-    const oldAdv = convertirSaldo(cli.periodo, monto, oldTotal).mesesAvance;
-    const newAdv = convertirSaldo(cli.periodo, monto, newTotal).mesesAvance;
+    const oldAdv = convertirSaldo(cli.periodo, monto, Math.max(0, oldTotal - aplicado)).mesesAvance;
+    const newAdv = convertirSaldo(cli.periodo, monto, Math.max(0, newTotal - aplicado)).mesesAvance;
     const pagoMeses = newAdv - oldAdv;
 
     const { rows: pagoRows } = await client.query(
@@ -53,7 +54,7 @@ pagosRouter.post('/', async (req, res, next) => {
       [cliente_id, fecha, pagoMeses, monto_total, medio, comprobante],
     );
 
-    const { pagado_hasta, saldo } = recomputarCobertura(base, cli.periodo, monto, newTotal);
+    const { pagado_hasta, saldo } = recomputarCobertura(base, cli.periodo, monto, newTotal, aplicado);
     const { rows: cliRows } = await client.query(
       'UPDATE clientes SET pagado_hasta = $1, saldo = $2, cobertura_base = $3 WHERE id = $4 RETURNING *',
       [pagado_hasta, saldo, base, cliente_id],
@@ -92,7 +93,7 @@ pagosRouter.delete('/:id', async (req, res, next) => {
       const { rows: sumRows } = await client.query(
         'SELECT COALESCE(SUM(monto_total), 0)::float AS t FROM pagos WHERE cliente_id = $1', [pago.cliente_id],
       );
-      const { pagado_hasta, saldo } = recomputarCobertura(base, cli.periodo, Number(cli.monto), Number(sumRows[0].t));
+      const { pagado_hasta, saldo } = recomputarCobertura(base, cli.periodo, Number(cli.monto), Number(sumRows[0].t), Number(cli.dinero_aplicado) || 0);
       await client.query('UPDATE clientes SET pagado_hasta = $1, saldo = $2, cobertura_base = $3 WHERE id = $4', [pagado_hasta, saldo, base, pago.cliente_id]);
     }
 

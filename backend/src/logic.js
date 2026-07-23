@@ -103,11 +103,14 @@ export function convertirSaldo(periodo, monto, dinero) {
   return { mesesAvance: av, saldo: Number(rem.toFixed(2)) };
 }
 
-// Recalcula cobertura (pagado_hasta) y saldo desde el dinero total pagado, partiendo
-// de la cobertura base (la que tendria el cliente con 0 pagos). Es deterministico:
-// permite registrar Y anular pagos sin descuadres.
-export function recomputarCobertura(coberturaBase, periodo, monto, dineroTotal) {
-  const { mesesAvance, saldo } = convertirSaldo(periodo, monto, dineroTotal);
+// Recalcula cobertura (pagado_hasta) y saldo desde el dinero pagado, partiendo de
+// la cobertura base. `dineroAplicado` = dinero ya "sellado" en cobertura_base a una
+// tarifa anterior (al cambiar la cuota); solo se convierte el dinero NO aplicado a
+// la tarifa actual, para no re-valorar lo ya pagado. Sigue siendo deterministico
+// (registrar/anular pagos no descuadra).
+export function recomputarCobertura(coberturaBase, periodo, monto, dineroTotal, dineroAplicado = 0) {
+  const disponible = Math.max(0, Number(dineroTotal) - Number(dineroAplicado || 0));
+  const { mesesAvance, saldo } = convertirSaldo(periodo, monto, disponible);
   return { pagado_hasta: aISODia1(sumarMeses(coberturaBase, mesesAvance)), saldo };
 }
 
