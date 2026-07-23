@@ -54,7 +54,7 @@ export default function CobrarPicker({ clientes, onElegir, onClose }) {
                     <span className="min-w-0 flex-1">
                       <span className="block font-semibold text-slate-100 truncate">{c.nombre}</span>
                       <span className="block text-xs text-slate-500 truncate">
-                        Pagado hasta <span className="text-slate-400 capitalize">{c.pagado_hasta_label}</span>
+                        Pagado hasta <span className="text-slate-400">{c.pagado_hasta_label}</span>
                       </span>
                     </span>
                     <span className={`tabular font-bold shrink-0 ${debe ? meta.text : 'text-slate-500'}`}>

@@ -143,6 +143,7 @@ export function enriquecerCliente(c, hoy = new Date()) {
     deuda,                      // deuda neta (lo que realmente falta pagar)
     estado: estado(debe),
     meses_cobertura: mesesCobertura(c.pagado_hasta, hoy),
-    pagado_hasta_label: etiquetaMes(c.pagado_hasta),
+    // Incluye el dia de cobro del cliente: "15 de junio 2026".
+    pagado_hasta_label: `${Number(c.dia_cobro) || 1} de ${etiquetaMes(c.pagado_hasta)}`,
   };
 }

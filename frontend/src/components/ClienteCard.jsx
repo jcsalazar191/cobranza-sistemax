@@ -67,7 +67,7 @@ export default function ClienteCard({ cliente, onAbrir, onPago, onRecordar, plan
 
       <p className="mt-2 text-xs text-slate-500 flex items-center justify-between gap-2">
         <span>
-          Pagado hasta <span className="text-slate-300 capitalize">{cliente.pagado_hasta_label}</span>
+          Pagado hasta <span className="text-slate-300">{cliente.pagado_hasta_label}</span>
           {cliente.meses_cobertura > 0 && (
             <span className="text-slate-600"> · +{cliente.meses_cobertura} mes(es)</span>
           )}
