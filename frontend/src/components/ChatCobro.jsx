@@ -3,7 +3,7 @@ import Modal from './Modal.jsx';
 import { api } from '../api.js';
 import { parseCobro } from '../lib/parseCobro.js';
 import { blobToWavBase64 } from '../lib/audioWav.js';
-import { soles, linkRecibo } from '../lib/ui.js';
+import { soles, linkRecibo, normaliza } from '../lib/ui.js';
 import { IconMic, IconSend, IconPlay, IconPause, IconStop, IconPlus, IconChevron, IconWhatsapp } from './Icons.jsx';
 
 const VACIO = { cliente: null, monto: null, meses: null, abono: false, fecha: null, medio: null };
@@ -402,6 +402,22 @@ export default function ChatCobro({ clientes, geminiConfigurado, autoGrabar, onC
     await ejecutarPago();
   }
 
+  // Enrutado local ("LLM routing"): un cobro de TEXTO clarisimo (cliente exacto +
+  // monto, sin palabras de otra accion) se registra SIN llamar al asistente
+  // (instantaneo, menos llamadas). Lo dudoso, otras acciones y el audio siguen con la IA.
+  function intentarCobroLocal(txt) {
+    const t = normaliza(txt);
+    const comandos = ['elimina', 'borra', 'anula', 'quita', 'crea', 'agrega', 'nuevo',
+      'edita', 'cambia', 'corrige', 'sube', 'baja', 'reactiva', 'activa', 'desactiva',
+      'cuota', 'cuanto', 'quien', 'consulta', 'debe', 'deben'];
+    if (comandos.some((k) => t.includes(k))) return false;
+    const p = parseCobro(txt, clientes);
+    if (!p.cliente || !(Number(p.monto) > 0) || (p.faltantes && p.faltantes.length)) return false;
+    setDraftBoth(combina(VACIO, p));
+    ejecutarPago();
+    return true;
+  }
+
   async function enviarTexto(t) {
     const txt = (t ?? '').trim();
     if (!txt || enviando) return;
@@ -412,6 +428,8 @@ export default function ChatCobro({ clientes, geminiConfigurado, autoGrabar, onC
     setRecibo(null);
     // Si estamos completando un cliente nuevo y respondiste un dato, lo relleno local.
     if (borradorClienteRef.current && manejarRespuestaClienteNueva(txt)) return;
+    // Enrutado local: cobro simple y claro -> registrar sin llamar al asistente.
+    if (intentarCobroLocal(txt)) return;
     setEnviando(true);
     try {
       const resp = await api.chatCobro({ texto: txt, contexto: contextoDraft() });
