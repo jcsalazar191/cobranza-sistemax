@@ -18,8 +18,10 @@ CREATE TABLE clientes (
     whatsapp      VARCHAR(9)  NOT NULL CHECK (whatsapp ~ '^[0-9]{9}$'),
     -- Monto mensual en Soles
     monto         NUMERIC(10,2) NOT NULL CHECK (monto >= 0),
-    -- Dia del mes en que cobra (1-31)
+    -- Dia del mes en que cobra (1-31). Cada cliente tiene el suyo; en ese dia vence.
     dia_cobro     SMALLINT    NOT NULL DEFAULT 1 CHECK (dia_cobro BETWEEN 1 AND 31),
+    -- Paga al FINAL del periodo (vencido) en vez de adelantado. Por defecto adelantado.
+    cobro_vencido BOOLEAN     NOT NULL DEFAULT FALSE,
     -- Ultimo mes cubierto (se guarda como el dia 1 de ese mes). DERIVADO: cobertura_base + bloques pagados.
     pagado_hasta  DATE        NOT NULL,
     -- Cobertura con 0 pagos (punto de partida para recalcular con el modelo de saldo).

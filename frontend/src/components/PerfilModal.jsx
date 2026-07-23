@@ -81,9 +81,9 @@ export default function PerfilModal({ email, pinActivo, diaGracia, onClose, onGu
         )}
 
         <div className="rounded-xl bg-slate-800/60 border border-slate-700/60 px-4 py-3 space-y-2">
-          <p className="text-sm font-medium text-slate-200">Día de plazo de pago</p>
+          <p className="text-sm font-medium text-slate-200">Día de cobro por defecto</p>
           <p className="text-xs text-slate-500">
-            Hasta ese día del mes, el mes en curso aún NO cuenta como vencido (cobras por adelantado). Ej: 5 = tienen plazo hasta el 5.
+            Se usa como día de cobro al crear clientes NUEVOS. Cada cliente tiene su propio día (editable en su ficha); en ese día vence su mes.
           </p>
           <div className="flex items-center gap-2">
             <input

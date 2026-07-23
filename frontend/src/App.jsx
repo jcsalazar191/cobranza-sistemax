@@ -409,6 +409,7 @@ export default function App() {
         <ClienteFormModal
           key={formKey}
           cliente={formCliente}
+          diaCobroDefault={diaGracia}
           onClose={() => setFormCliente(undefined)}
           onGuardar={guardarCliente}
           onEliminar={eliminarCliente}

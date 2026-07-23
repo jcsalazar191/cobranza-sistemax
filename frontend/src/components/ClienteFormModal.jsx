@@ -15,17 +15,18 @@ function shiftMes(ym, n) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-export default function ClienteFormModal({ cliente, onClose, onGuardar, onEliminar, onAnularPago }) {
+export default function ClienteFormModal({ cliente, diaCobroDefault, onClose, onGuardar, onEliminar, onAnularPago }) {
   const editando = Boolean(cliente?.id);
   const [form, setForm] = useState({
     nombre: cliente?.nombre ?? '',
     whatsapp: cliente?.whatsapp ?? '',
     monto: cliente?.monto ?? '',
-    dia_cobro: cliente?.dia_cobro ?? 1,
+    dia_cobro: cliente?.dia_cobro ?? diaCobroDefault ?? 1,
     pagado_hasta: cliente ? aMonthInput(cliente.pagado_hasta) : mesActual(),
     activo: cliente?.activo ?? true,
     periodo: cliente?.periodo ?? 'MENSUAL',
     notas: cliente?.notas ?? '',
+    cobro_vencido: cliente?.cobro_vencido ?? false,
   });
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
@@ -53,6 +54,7 @@ export default function ClienteFormModal({ cliente, onClose, onGuardar, onElimin
         activo: Boolean(form.activo),
         periodo: form.periodo,
         notas: form.notas.trim() || null,
+        cobro_vencido: Boolean(form.cobro_vencido),
       }, cliente?.id);
     } catch (err) {
       setError(err.message);
@@ -110,10 +112,29 @@ export default function ClienteFormModal({ cliente, onClose, onGuardar, onElimin
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label htmlFor="dia_cobro" className={labelCls}>Dia de cobro</label>
+            <label htmlFor="dia_cobro" className={labelCls}>Día de cobro</label>
             <input id="dia_cobro" type="number" min="1" max="31" required
               value={form.dia_cobro} onChange={set('dia_cobro')} className={`${inputCls} tabular`} />
+            <p className="mt-1 text-xs text-slate-500">Ese día vence su mes.</p>
           </div>
+        </div>
+
+        <div className="flex items-center justify-between rounded-xl bg-slate-800/60 border border-slate-700/60 px-4 py-3">
+          <div>
+            <p className="text-sm font-medium text-slate-200">
+              {form.cobro_vencido ? 'Cobro vencido' : 'Cobro adelantado'}
+            </p>
+            <p className="text-xs text-slate-500">
+              {form.cobro_vencido ? 'Paga al terminar su periodo (debe el mes anterior).' : 'Debe apenas llega su día de cobro.'}
+            </p>
+          </div>
+          <button
+            type="button" role="switch" aria-checked={form.cobro_vencido} aria-label="Cobro vencido"
+            onClick={() => setForm((f) => ({ ...f, cobro_vencido: !f.cobro_vencido }))}
+            className={`relative w-12 h-7 rounded-full transition-colors cursor-pointer shrink-0 ${form.cobro_vencido ? 'bg-amber-500' : 'bg-slate-600'}`}
+          >
+            <span className={`absolute top-1 left-1 w-5 h-5 rounded-full bg-white transition-transform ${form.cobro_vencido ? 'translate-x-5' : ''}`} />
+          </button>
         </div>
 
         <div>

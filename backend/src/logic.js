@@ -45,17 +45,16 @@ export function setDiaGracia(n) {
   if (Number.isInteger(v) && v >= 1 && v <= 28) diaGraciaActual = v;
 }
 
-// Meses que debe un cliente.
-// pagado_hasta cubre HASTA ese mes inclusive. El "mes objetivo" (ultimo mes que
-// ya debio estar pagado) es el mes actual, salvo que estemos dentro del plazo
-// (dia <= diaGracia), en cuyo caso el mes en curso aun no cuenta y el objetivo
-// es el mes anterior.
-export function mesesDebe(pagadoHasta, hoy = new Date(), diaGracia = diaGraciaActual) {
+// Meses que debe un cliente, usando SU dia de cobro (cada cliente tiene el suyo).
+// - Adelantado (lo normal): en su dia de cobro el mes en curso YA vence; antes de
+//   ese dia todavia no cuenta.
+// - Vencido (paga al final del periodo): debe el periodo anterior (un mes atras).
+export function mesesDebe(pagadoHasta, hoy = new Date(), diaCobro = 1, cobroVencido = false) {
   const ph = aPrimerDiaMes(pagadoHasta);
+  const dia = Number(diaCobro) >= 1 && Number(diaCobro) <= 31 ? Number(diaCobro) : 1;
   const objetivo = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-  if (hoy.getDate() <= diaGracia) {
-    objetivo.setMonth(objetivo.getMonth() - 1);
-  }
+  if (hoy.getDate() < dia) objetivo.setMonth(objetivo.getMonth() - 1); // aun no llega su dia
+  if (cobroVencido) objetivo.setMonth(objetivo.getMonth() - 1);        // paga al final
   const diff = indiceMes(objetivo) - indiceMes(ph);
   return diff > 0 ? diff : 0;
 }
@@ -114,7 +113,7 @@ export function recomputarCobertura(coberturaBase, periodo, monto, dineroTotal) 
 
 // Enriquece una fila de cliente con deuda/estado calculados.
 export function enriquecerCliente(c, hoy = new Date()) {
-  const debe = mesesDebe(c.pagado_hasta, hoy);
+  const debe = mesesDebe(c.pagado_hasta, hoy, Number(c.dia_cobro) || 1, Boolean(c.cobro_vencido));
   const monto = Number(c.monto);
   const plan = PLAN_PERIODO[c.periodo];
 

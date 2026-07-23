@@ -88,6 +88,7 @@ function parseClienteBody(body) {
     activo: reqBool(body, 'activo', true),
     periodo: optEnum(body, 'periodo', PERIODOS, 'MENSUAL'),
     notas: optStr(body, 'notas', { max: 2000 }),
+    cobro_vencido: reqBool(body, 'cobro_vencido', false), // paga al final del periodo
   };
 }
 
@@ -96,9 +97,9 @@ clientesRouter.post('/', async (req, res, next) => {
   try {
     const c = parseClienteBody(req.body);
     const { rows } = await query(
-      `INSERT INTO clientes (nombre, whatsapp, monto, dia_cobro, pagado_hasta, cobertura_base, saldo, activo, periodo, notas)
-       VALUES ($1,$2,$3,$4,$5,$5,0,$6,$7,$8) RETURNING *`,
-      [c.nombre, c.whatsapp, c.monto, c.dia_cobro, c.pagado_hasta, c.activo, c.periodo, c.notas],
+      `INSERT INTO clientes (nombre, whatsapp, monto, dia_cobro, pagado_hasta, cobertura_base, saldo, activo, periodo, notas, cobro_vencido)
+       VALUES ($1,$2,$3,$4,$5,$5,0,$6,$7,$8,$9) RETURNING *`,
+      [c.nombre, c.whatsapp, c.monto, c.dia_cobro, c.pagado_hasta, c.activo, c.periodo, c.notas, c.cobro_vencido],
     );
     res.status(201).json(enriquecerCliente(rows[0]));
   } catch (err) { next(err); }
@@ -120,9 +121,9 @@ clientesRouter.put('/:id', async (req, res, next) => {
 
     const { rows } = await query(
       `UPDATE clientes SET nombre=$1, whatsapp=$2, monto=$3, dia_cobro=$4,
-              pagado_hasta=$5, cobertura_base=$6, saldo=$7, activo=$8, periodo=$9, notas=$10
-       WHERE id=$11 RETURNING *`,
-      [c.nombre, c.whatsapp, c.monto, c.dia_cobro, pagado_hasta, cobertura_base, saldo, c.activo, c.periodo, c.notas, req.params.id],
+              pagado_hasta=$5, cobertura_base=$6, saldo=$7, activo=$8, periodo=$9, notas=$10, cobro_vencido=$11
+       WHERE id=$12 RETURNING *`,
+      [c.nombre, c.whatsapp, c.monto, c.dia_cobro, pagado_hasta, cobertura_base, saldo, c.activo, c.periodo, c.notas, c.cobro_vencido, req.params.id],
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Cliente no encontrado.' });
     res.json(enriquecerCliente(rows[0]));
