@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { pool } from '../db.js';
-import { enriquecerCliente, convertirSaldo, recomputarCobertura } from '../logic.js';
+import { enriquecerCliente, avanzarCobertura } from '../logic.js';
 import { reqInt, reqEnum, optStr, reqNum, reqFecha } from '../validate.js';
 
 export const pagosRouter = Router();
@@ -42,10 +42,13 @@ pagosRouter.post('/', async (req, res, next) => {
     );
     const oldTotal = Number(sumRows[0].t);
     const newTotal = Number((oldTotal + monto_total).toFixed(2));
-    const aplicado = Number(cli.dinero_aplicado) || 0; // dinero sellado a tarifa anterior
+    // Historial de tarifas: cada mes de cobertura se cobra a su tarifa vigente.
+    const { rows: tarifas } = await client.query(
+      "SELECT monto, periodo, to_char(desde, 'YYYY-MM-DD') AS desde FROM tarifas WHERE cliente_id = $1 ORDER BY desde, id", [cliente_id],
+    );
     // Meses que avanza ESTE pago (para el historial): diferencia de cobertura.
-    const oldAdv = convertirSaldo(cli.periodo, monto, Math.max(0, oldTotal - aplicado)).mesesAvance;
-    const newAdv = convertirSaldo(cli.periodo, monto, Math.max(0, newTotal - aplicado)).mesesAvance;
+    const oldAdv = avanzarCobertura(base, oldTotal, tarifas, monto, cli.periodo).mesesAvance;
+    const newAdv = avanzarCobertura(base, newTotal, tarifas, monto, cli.periodo).mesesAvance;
     const pagoMeses = newAdv - oldAdv;
 
     const { rows: pagoRows } = await client.query(
@@ -54,7 +57,7 @@ pagosRouter.post('/', async (req, res, next) => {
       [cliente_id, fecha, pagoMeses, monto_total, medio, comprobante],
     );
 
-    const { pagado_hasta, saldo } = recomputarCobertura(base, cli.periodo, monto, newTotal, aplicado);
+    const { pagado_hasta, saldo } = avanzarCobertura(base, newTotal, tarifas, monto, cli.periodo);
     const { rows: cliRows } = await client.query(
       'UPDATE clientes SET pagado_hasta = $1, saldo = $2, cobertura_base = $3 WHERE id = $4 RETURNING *',
       [pagado_hasta, saldo, base, cliente_id],
@@ -93,7 +96,10 @@ pagosRouter.delete('/:id', async (req, res, next) => {
       const { rows: sumRows } = await client.query(
         'SELECT COALESCE(SUM(monto_total), 0)::float AS t FROM pagos WHERE cliente_id = $1', [pago.cliente_id],
       );
-      const { pagado_hasta, saldo } = recomputarCobertura(base, cli.periodo, Number(cli.monto), Number(sumRows[0].t), Number(cli.dinero_aplicado) || 0);
+      const { rows: tarifas } = await client.query(
+        "SELECT monto, periodo, to_char(desde, 'YYYY-MM-DD') AS desde FROM tarifas WHERE cliente_id = $1 ORDER BY desde, id", [pago.cliente_id],
+      );
+      const { pagado_hasta, saldo } = avanzarCobertura(base, Number(sumRows[0].t), tarifas, Number(cli.monto), cli.periodo);
       await client.query('UPDATE clientes SET pagado_hasta = $1, saldo = $2, cobertura_base = $3 WHERE id = $4', [pagado_hasta, saldo, base, pago.cliente_id]);
     }
 

@@ -14,6 +14,10 @@ dist/
 
 # Logs y temporales
 *.log
+/diagnostico/
 .preview-*.png
 .DS_Store
 Thumbs.db
+.okey
+.nkey
+.gkey

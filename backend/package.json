@@ -8,6 +8,7 @@
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
     "migrate": "node scripts/run-sql.js schema.sql",
+    "migrate:aprendizaje": "node scripts/run-sql.js ../aprendizaje.sql",
     "seed": "node scripts/run-sql.js seed.sql"
   },
   "dependencies": {
@@ -15,6 +16,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
+    "pdfkit": "^0.20.1",
     "pg": "^8.13.1"
   }
 }

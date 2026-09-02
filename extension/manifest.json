@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "SysFarma Copiloto WhatsApp",
+  "version": "0.1.0",
+  "description": "Panel copiloto y tablero de posibles sobre WhatsApp Web, conectado al backend de cobranza.",
+  "action": { "default_title": "Abrir tablero de posibles" },
+  "background": { "service_worker": "background.js" },
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://cobranza.sysfarma.pe/*",
+    "http://localhost:3100/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://web.whatsapp.com/*"],
+      "js": ["wa-js/wppconnect-wa.js", "inject.js"],
+      "world": "MAIN",
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://web.whatsapp.com/*"],
+      "js": ["tablero.js", "content.js"],
+      "css": ["panel.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

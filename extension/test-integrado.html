@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>TEST Copiloto integrado</title>
+  <link rel="stylesheet" href="panel.css">
+  <style>
+    body { background: #111b21; margin: 0; height: 100vh; }
+    footer { position: fixed; bottom: 0; left: 0; width: 60%; background: #202c33; padding: 10px; }
+    footer div[contenteditable] { background: #2a3942; color: #fff; min-height: 20px; padding: 8px; border-radius: 8px; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+  <!-- cuadro de redaccion fake de WhatsApp -->
+  <footer><div contenteditable="true"></div></footer>
+
+  <script>
+    // Stub de chrome.* con respuestas fake del backend (mismo shape real).
+    window.__llamadas = [];
+    const dia = 864e5;
+    const L = (id, nombre, telefono, notas, dir, msg, dias, score, ciudad) => ({
+      id, nombre, telefono, notas, ultima_direccion: dir, ultimo_mensaje: msg,
+      ultimo_contacto: new Date(Date.now() - dias * dia).toISOString(),
+      score: score ?? null, ciudad: ciudad ?? null,
+    });
+    const FAKE_LEADS = [
+      L(1, 'Botica Norte', '51900000001', '[por_pagar/caliente] Listo para pagar', 'in', 'Listo', 0, 85, 'Lima'),
+      L(2, 'Botica Sur', '51900000002', '[demo/tibio] Vio la demo, falta feedback', 'out', 'Buenas noches, mi estimada, como esta? hace v...', 7),
+      L(3, 'Botica Centro', '51900000003', '[demo/tibio] Le gusto', 'out', 'Perfecto Edward, me alegra que le haya gustado...', 7, 60),
+      L(4, 'Botica Este', '51900000004', '[demo/tibio] Confirmar demo', 'out', 'Hola Julio, como va todo? Solo queria confirmar...', 7),
+      L(5, null, '51900000005', '[por_confirmar/tibio] Recordar reunion', 'out', 'Hola Summer, como va todo? Solo queria record...', 7),
+      L(6, null, '51900000006', '[por_confirmar/tibio] Coordinando', 'out', 'Hola Diego, entiendo que esta buscando coordin...', 7, 45),
+      L(7, null, '51900000007', '[info_enviada/tibio] Plan mensual enviado', 'out', 'Claro Ana, el costo del plan mensual es de S/ 69...', 7),
+      L(8, 'Salud Total', '51900000008', '[info_enviada/caliente] Interesado', 'in', 'A perfecto mi estimado', 7, 70, 'Trujillo'),
+      L(9, 'Botica Oeste', '51911111111', '[primer_contacto/frio] Recien escribe', 'in', 'Ok gracias', 6),
+      L(10, 'Botica Fria', '51922222222', '[frio/frio] Sin respuesta hace un mes', 'out', 'Hola, como va todo?', 30),
+      L(11, 'Negocia SAC', '51933333333', '[negociando/caliente] Pide descuento', 'in', 'Me lo deja en 60?', 1, 78),
+      L(12, 'Sin Etapa SRL', '51944444444', null, 'in', 'Hola', 2),
+    ];
+    window.chrome = {
+      runtime: {
+        onMessage: { addListener: () => {} },
+        sendMessage: (msg, cb) => {
+          window.__llamadas.push(msg);
+          if (msg?.tipo !== 'api') return cb({ ok: true });
+          if (msg.path === '/me') return cb({ ok: true, status: 200, data: { email: 'test@test' } });
+          if (msg.path === '/leads') return cb({ ok: true, status: 200, data: FAKE_LEADS });
+          if (msg.path.startsWith('/leads/por-telefono/')) return cb({
+            ok: true, status: 200,
+            data: { id: 1, nombre: 'Botica Norte', telefono: '51900000001', categoria: 'posible', ciudad: 'Lima', score: 85, ultima_direccion: 'in', notas: '[por_pagar/caliente] Listo para pagar, solo falta enviarle medios de pago' },
+          });
+          if (msg.path === '/leads/plantillas') return cb({
+            ok: true, status: 200,
+            data: [
+              { id: 1, atajo: 'pago', titulo: 'Medios de pago', texto: 'Hola {nombre}, le comparto nuestros medios de pago: BCP 123-456, Yape 999888777.' },
+              { id: 2, atajo: 'demo', titulo: 'Agendar demo', texto: 'Le parece si coordinamos una demostracion esta semana?' },
+            ],
+          });
+          if (msg.path === '/leads/seguimientos') return cb({
+            ok: true, status: 200,
+            data: [
+              { id: 1, telefono: '51900000001', nombre: 'Botica Norte', score: 85, dias: 3, motivo: 'por_pagar_sin_respuesta', ultimo_mensaje: 'Listo', ultima_direccion: 'in' },
+              { id: 11, telefono: '51933333333', nombre: 'Negocia SAC', score: 78, dias: 6, motivo: 'negociando_frio', ultimo_mensaje: 'Me lo deja en 60?', ultima_direccion: 'in' },
+            ],
+          });
+          if (msg.path === '/leads/recordatorio') return cb({ ok: true, status: 200, data: { ok: true, id: 9, fecha_hora: new Date(Date.now() + 2 * dia).toISOString() } });
+          if (/^\/leads\/\d+\/aprendizaje-resultado$/.test(msg.path)) return cb({ ok: true, status: 200, data: { ok: true } });
+          if (/^\/leads\/\d+$/.test(msg.path) && msg.method === 'PATCH') return cb({ ok: true, status: 200, data: { ok: true } });
+          if (msg.path === '/leads/sugerir-directo') return cb({
+            ok: true, status: 200,
+            data: { sugerencia: 'Perfecto, mi estimado Carlos. Le comparto los medios de pago para que pueda realizar el abono cuando guste.', sugerencia_id: 77, lead_id: 1, categoria: 'posible' },
+          });
+          if (msg.path === '/leads/aprendizaje-envio') return cb({ ok: true, status: 200, data: { ok: true, aprendizaje: { id: 77, editado: true } } });
+          cb({ ok: false, status: 404, data: { error: 'no stub' } });
+        },
+      },
+    };
+  </script>
+  <script src="tablero.js"></script>
+  <script src="content.js"></script>
+  <script>
+    // Simula a inject.js: reporta chat activo, responde etiquetas, captura abrir-chat.
+    window.addEventListener('message', (ev) => {
+      const d = ev.data;
+      if (d?.fuente !== 'copiloto-sysfarma-ui') return;
+      if (d.tipo === 'abrir-chat') window.__abierto = d.telefono;
+      if (d.tipo === 'etiqueta') window.__etiqueta = d;
+      if (d.tipo === 'listar-etiquetas') {
+        window.postMessage({
+          fuente: 'copiloto-sysfarma', tipo: 'etiquetas',
+          columnas: [
+            { id: '1', nombre: 'Por pagar', color: '#64c286', chats: [
+              { telefono: '51900000001', nombre: 'Botica Norte', fecha: new Date().toISOString() },
+              { telefono: '51933333333', nombre: 'Negocia SAC', fecha: new Date(Date.now() - dia).toISOString() },
+            ] },
+            { id: '2', nombre: 'Demo agendada', color: '#ffd429', chats: [
+              { telefono: '51900000002', nombre: 'Botica Sur', fecha: new Date(Date.now() - 7 * dia).toISOString() },
+            ] },
+            { id: '3', nombre: 'Nuevo cliente', color: '#6bcbef', chats: [
+              { telefono: '51900000008', nombre: 'Salud Total', fecha: new Date(Date.now() - 2 * dia).toISOString() },
+            ] },
+          ],
+        }, '*');
+      }
+    });
+    setTimeout(() => {
+      window.postMessage({
+        fuente: 'copiloto-sysfarma', tipo: 'chat',
+        chat: {
+          telefono: '51900000001', nombre: 'Carlos Arias',
+          mensajes: [
+            { direccion: 'out', cuerpo: 'Hola Carlos, como va todo?', fecha: new Date(Date.now() - 3600e3).toISOString() },
+            { direccion: 'in', cuerpo: 'Listo, a donde le deposito?', fecha: new Date().toISOString() },
+          ],
+          etiquetas: ['1'],
+          catalogo: [
+            { id: '1', nombre: 'Por pagar', color: '#64c286' },
+            { id: '2', nombre: 'Demo agendada', color: '#ffd429' },
+            { id: '3', nombre: 'Nuevo cliente', color: '#6bcbef' },
+          ],
+        },
+      }, '*');
+    }, 300);
+  </script>
+</body>
+</html>

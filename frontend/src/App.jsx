@@ -6,6 +6,7 @@ import ClienteCard from './components/ClienteCard.jsx';
 import PagoModal from './components/PagoModal.jsx';
 import ClienteFormModal from './components/ClienteFormModal.jsx';
 import IngresosView from './components/IngresosView.jsx';
+import PosiblesView from './components/PosiblesView.jsx';
 import ConfigModal from './components/ConfigModal.jsx';
 import DatosModal from './components/DatosModal.jsx';
 import CobrarPicker from './components/CobrarPicker.jsx';
@@ -29,6 +30,7 @@ function pasaFiltro(c, filtro) {
 
 export default function App() {
   const [auth, setAuth] = useState(null); // null=verificando, false=sin sesion, true=con sesion
+  const [rol, setRol] = useState('admin');
   const [clientes, setClientes] = useState([]);
   const [resumen, setResumen] = useState(null);
   const [cargando, setCargando] = useState(true);
@@ -81,11 +83,18 @@ export default function App() {
 
   // Verifica sesion al inicio.
   useEffect(() => {
-    api.me().then((r) => { setEmail(r?.email || ''); setAuth(true); }).catch(() => setAuth(false));
+    api.me().then((r) => { setEmail(r?.email || ''); setRol(r?.role || 'admin'); setVista(r?.role === 'chat' ? 'posibles' : 'clientes'); setAuth(true); }).catch(() => setAuth(false));
   }, []);
 
   // Carga datos solo cuando hay sesion.
-  useEffect(() => { if (auth) cargar(); }, [cargar, auth]);
+  useEffect(() => {
+    if (!auth) return;
+    if (rol === 'admin') {
+      cargar();
+    } else {
+      api.getConfig().then((cfg) => setPinActivo(Boolean(cfg?.pin_activo))).catch(() => setPinActivo(false)).finally(() => setCargando(false));
+    }
+  }, [cargar, auth, rol]);
 
   async function salir() {
     try { await api.logout(); } catch { /* ignore */ }
@@ -156,9 +165,12 @@ export default function App() {
     setPagoInicial(null);
   }
 
-  async function guardarCliente(data, id) {
+  async function guardarCliente(data, id, pagoInicial) {
     if (id) await api.editarCliente(id, data);
-    else await api.crearCliente(data);
+    else {
+      const c = await api.crearCliente(data);
+      if (pagoInicial && c?.id) await api.registrarPago({ cliente_id: c.id, ...pagoInicial });
+    }
     setFormCliente(undefined);
     await cargar();
   }
@@ -225,7 +237,7 @@ export default function App() {
     return <div className="min-h-dvh grid place-items-center text-slate-500">Cargando...</div>;
   }
   if (auth === false) {
-    return <Login onLogin={() => { desbloquear(); setAuth(true); }} />;
+    return <Login onLogin={(sesion) => { sessionStorage.removeItem('pin_ok'); setDesbloqueado(false); setEmail(sesion?.email || ''); setRol(sesion?.role || 'admin'); setVista(sesion?.role === 'chat' ? 'posibles' : 'clientes'); setAuth(true); }} />;
   }
   // Con sesion valida: si hay PIN configurado, pedirlo antes de mostrar la app.
   if (pinActivo === null) {
@@ -236,13 +248,14 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-dvh max-w-2xl mx-auto px-4 pb-28">
+    <div className="min-h-dvh w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-28">
       <header className="pt-6 pb-4 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-100">Cobranzas</h1>
-          <p className="text-xs text-slate-500">Mi Negocio</p>
+          <h1 className="text-xl font-bold text-slate-100">{rol === 'chat' ? 'Chat comercial' : 'Cobranzas'}</h1>
+          <p className="text-xs text-slate-500">{rol === 'chat' ? 'Posibles' : 'Mi Negocio'}</p>
         </div>
         <div className="flex items-center gap-2">
+          {rol === 'admin' && <>
           <button
             type="button"
             onClick={() => setConfigOpen(true)}
@@ -270,6 +283,7 @@ export default function App() {
           >
             <IconUser width={18} height={18} />
           </button>
+          </>}
           <button
             type="button"
             onClick={salir}
@@ -283,13 +297,14 @@ export default function App() {
       </header>
 
       <div className="space-y-5">
-        <Resumen resumen={resumen} />
+        {rol === 'admin' && vista !== 'posibles' && <Resumen resumen={resumen} />}
 
         {/* Conmutador de vista */}
-        <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-slate-900 border border-slate-700/50">
+        <div className={`${rol === 'chat' ? 'hidden' : 'grid grid-cols-3'} gap-1 p-1 rounded-xl bg-slate-900 border border-slate-700/50`}>
           {[
             { key: 'clientes', label: 'Clientes' },
-            { key: 'ingresos', label: 'Ingresos por mes' },
+            { key: 'ingresos', label: 'Ingresos' },
+            { key: 'posibles', label: 'Posibles' },
           ].map((v) => (
             <button
               key={v.key}
@@ -312,6 +327,8 @@ export default function App() {
 
         {vista === 'ingresos' ? (
           <IngresosView />
+        ) : vista === 'posibles' ? (
+          <PosiblesView />
         ) : (
           <>
             <div className="flex justify-end">

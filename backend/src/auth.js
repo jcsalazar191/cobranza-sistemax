@@ -1,9 +1,12 @@
 import crypto from 'node:crypto';
 import { Router } from 'express';
 
-// Login simple de un solo usuario (credenciales y secreto desde .env).
+// Login por roles: admin conserva las credenciales principales y chat solo ve
+// el buzon de Posibles.
 const EMAIL = (process.env.AUTH_EMAIL || 'admin@ejemplo.com').toLowerCase();
 const PASSWORD = process.env.AUTH_PASSWORD || 'changeme';
+const CHAT_EMAIL = (process.env.CHAT_AUTH_EMAIL || '').trim().toLowerCase();
+const CHAT_PASSWORD = process.env.CHAT_AUTH_PASSWORD || '';
 const SECRET = process.env.SESSION_SECRET || 'cambia-este-secreto-en-produccion';
 const COOKIE_SECURE = process.env.COOKIE_SECURE === 'true';
 const DIAS = 30;
@@ -37,8 +40,14 @@ function igual(a, b) {
 
 export function requireAuth(req, res, next) {
   const token = req.cookies?.[COOKIE];
-  if (verificar(token)) return next();
+  const user = verificar(token);
+  if (user) { req.user = { ...user, role: user.role || 'admin' }; return next(); }
   return res.status(401).json({ error: 'No autorizado.' });
+}
+
+export function requireAdmin(req, res, next) {
+  if (req.user?.role === 'admin') return next();
+  return res.status(403).json({ error: 'Este usuario solo tiene acceso al chat.' });
 }
 
 export const authRouter = Router();
@@ -47,11 +56,14 @@ export const authRouter = Router();
 authRouter.post('/login', (req, res) => {
   const email = String(req.body?.email ?? '').trim().toLowerCase();
   const password = String(req.body?.password ?? '');
-  if (!igual(email, EMAIL) || !igual(password, PASSWORD)) {
+  const esAdmin = igual(email, EMAIL) && igual(password, PASSWORD);
+  const esChat = Boolean(CHAT_EMAIL) && igual(email, CHAT_EMAIL) && igual(password, CHAT_PASSWORD);
+  if (!esAdmin && !esChat) {
     return res.status(401).json({ error: 'Correo o contraseña incorrectos.' });
   }
   const exp = Date.now() + DIAS * 86400000;
-  const token = firmar({ email, exp });
+  const role = esAdmin ? 'admin' : 'chat';
+  const token = firmar({ email, role, exp });
   res.cookie(COOKIE, token, {
     httpOnly: true,
     sameSite: 'lax',
@@ -59,7 +71,7 @@ authRouter.post('/login', (req, res) => {
     maxAge: DIAS * 86400000,
     path: '/',
   });
-  res.json({ ok: true, email });
+  res.json({ ok: true, email, role });
 });
 
 // POST /api/logout
@@ -72,5 +84,5 @@ authRouter.post('/logout', (req, res) => {
 authRouter.get('/me', (req, res) => {
   const payload = verificar(req.cookies?.[COOKIE]);
   if (!payload) return res.status(401).json({ error: 'No autorizado.' });
-  res.json({ email: payload.email });
+  res.json({ email: payload.email, role: payload.role || 'admin' });
 });

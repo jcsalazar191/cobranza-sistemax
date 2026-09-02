@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { query } from './db.js';
-import { authRouter, requireAuth } from './auth.js';
+import { authRouter, requireAuth, requireAdmin } from './auth.js';
 import { clientesRouter } from './routes/clientes.js';
 import { pagosRouter } from './routes/pagos.js';
 import { exportRouter } from './routes/export.js';
@@ -16,6 +16,10 @@ import { ingresosRouter } from './routes/ingresos.js';
 import { configRouter, cargarDiaGracia } from './routes/config.js';
 import { recordatoriosRouter } from './routes/recordatorios.js';
 import { chatCobroRouter } from './routes/chatCobro.js';
+import { waWebhookRouter } from './routes/waWebhook.js';
+import { iniciarRecordatoriosCitas } from './recordatoriosCitas.js';
+import { iniciarReporteSemanal } from './reporteSemanal.js';
+import { leadsRouter } from './routes/leads.js';
 
 const app = express();
 const PORT = process.env.PORT || 3100;
@@ -43,17 +47,22 @@ app.get('/api/health', async (req, res) => {
 // Auth (login/logout/me) - publico.
 app.use('/api', authRouter);
 
+// Webhook de WhatsApp (Evolution) - PUBLICO: no manda cookie; se valida con el
+// token del path. Debe ir ANTES del requireAuth.
+app.use('/api/wa', waWebhookRouter);
+
 // De aqui en adelante, todo /api requiere sesion.
 app.use('/api', requireAuth);
 
-app.use('/api/clientes', clientesRouter);
-app.use('/api/pagos', pagosRouter);
-app.use('/api/ingresos', ingresosRouter);
+app.use('/api/clientes', requireAdmin, clientesRouter);
+app.use('/api/pagos', requireAdmin, pagosRouter);
+app.use('/api/ingresos', requireAdmin, ingresosRouter);
 app.use('/api/config', configRouter);
-app.use('/api/recordatorios', recordatoriosRouter);
-app.use('/api/chat-cobro', chatCobroRouter);
-app.use('/api/export', exportRouter);
-app.use('/api/import', importRouter);
+app.use('/api/recordatorios', requireAdmin, recordatoriosRouter);
+app.use('/api/chat-cobro', requireAdmin, chatCobroRouter);
+app.use('/api/leads', leadsRouter);
+app.use('/api/export', requireAdmin, exportRouter);
+app.use('/api/import', requireAdmin, importRouter);
 
 // 404 para rutas /api desconocidas.
 app.use('/api', (req, res) => res.status(404).json({ error: 'Ruta no encontrada.' }));
@@ -89,4 +98,6 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`API cobranza escuchando en http://localhost:${PORT}`);
   cargarDiaGracia(); // sincroniza el dia de plazo guardado
+  iniciarRecordatoriosCitas(); // avisa por WhatsApp antes de que llegue cada cita
+  iniciarReporteSemanal(); // resumen del embudo cada lunes 8am
 });

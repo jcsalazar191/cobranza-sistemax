@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { IconClose } from './Icons.jsx';
 
 // Modal mobile-first: hoja inferior en movil, centrado en pantallas grandes.
-export default function Modal({ titulo, onClose, children, footer }) {
+export default function Modal({ titulo, onClose, children, footer, accionesHeader }) {
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', onKey);
@@ -26,15 +26,18 @@ export default function Modal({ titulo, onClose, children, footer }) {
         aria-label={titulo}
       >
         <header className="flex items-center justify-between px-5 py-4 border-b border-slate-700/60">
-          <h2 className="text-base font-semibold text-slate-100">{titulo}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Cerrar"
-            className="grid place-items-center w-11 h-11 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors cursor-pointer"
-          >
-            <IconClose />
-          </button>
+          <h2 className="text-base font-semibold text-slate-100 truncate">{titulo}</h2>
+          <div className="flex items-center gap-1 shrink-0">
+            {accionesHeader}
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Cerrar"
+              className="grid place-items-center w-11 h-11 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              <IconClose />
+            </button>
+          </div>
         </header>
 
         <div className="px-5 py-4 overflow-y-auto">{children}</div>

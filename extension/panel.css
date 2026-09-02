@@ -1,0 +1,127 @@
+/* Copiloto SysFarma — paleta slate del sistema de cobranza. */
+#cop-sf { all: initial; font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif; }
+#cop-sf *, #cop-sf *::before, #cop-sf *::after { box-sizing: border-box; }
+#cop-sf [hidden] { display: none !important; }
+
+#cop-toggle {
+  position: fixed; right: 16px; bottom: 18px; z-index: 2147483646;
+  background: #0f172a; color: #6ee7b7; border: 1px solid rgba(52, 211, 153, .4);
+  border-radius: 999px; padding: 9px 16px; font-size: 13px; font-weight: 700;
+  cursor: pointer; box-shadow: 0 8px 24px rgba(2, 6, 23, .6);
+}
+#cop-toggle:hover { background: #1e293b; }
+
+#cop-panel {
+  position: fixed; top: 0; right: 0; bottom: 0; width: 330px; z-index: 2147483645;
+  background: #020617; color: #e2e8f0; border-left: 1px solid rgba(51, 65, 85, .6);
+  display: flex; flex-direction: column; gap: 14px; padding: 14px;
+  overflow-y: auto; font-size: 13px; box-shadow: -12px 0 32px rgba(2, 6, 23, .55);
+}
+#cop-panel header { display: flex; align-items: center; justify-content: space-between; }
+#cop-panel header strong { font-size: 15px; color: #f1f5f9; letter-spacing: .02em; }
+#cop-head-botones { display: flex; gap: 6px; }
+
+#cop-panel button {
+  background: #0f172a; color: #cbd5e1; border: 1px solid rgba(51, 65, 85, .6);
+  border-radius: 8px; padding: 7px 10px; font-size: 12px; cursor: pointer;
+}
+#cop-panel button:hover { background: #1e293b; }
+#cop-panel button:disabled { opacity: .45; cursor: default; }
+#cop-panel .cop-primario {
+  background: rgba(16, 185, 129, .15); color: #6ee7b7;
+  border-color: rgba(52, 211, 153, .4); font-weight: 700; width: 100%;
+}
+#cop-panel .cop-primario:hover { background: rgba(16, 185, 129, .25); }
+
+.cop-fila-fecha input { flex: 1 1 110px; }
+.cop-fila-fecha select {
+  background: #0f172a; color: #e2e8f0; border: 1px solid rgba(51, 65, 85, .7);
+  border-radius: 8px; padding: 6px 4px; font-size: 12px;
+}
+#cop-panel input, #cop-panel textarea {
+  width: 100%; background: #0f172a; color: #e2e8f0; border: 1px solid rgba(51, 65, 85, .7);
+  border-radius: 8px; padding: 8px 10px; font-size: 13px; margin-bottom: 8px;
+  font-family: inherit; resize: vertical;
+}
+#cop-panel input:focus, #cop-panel textarea:focus { outline: 1px solid rgba(52, 211, 153, .5); }
+
+.cop-nota { color: #64748b; font-size: 12px; margin: 0; }
+.cop-error { color: #fca5a5; font-size: 12px; margin: 6px 0 0; }
+.cop-titulo-sec { color: #94a3b8; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin: 0 0 6px; }
+
+#cop-ficha { background: #0f172a; border: 1px solid rgba(51, 65, 85, .5); border-radius: 10px; padding: 12px; }
+.cop-nombre { margin: 0; font-size: 14px; font-weight: 700; color: #f8fafc; }
+.cop-tel { margin: 2px 0 0; color: #64748b; font-size: 12px; }
+.cop-resumen { margin-top: 8px; line-height: 1.35; }
+
+.cop-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.cop-badge {
+  border: 1px solid rgba(100, 116, 139, .5); color: #94a3b8; border-radius: 5px;
+  padding: 2px 7px; font-size: 10px; font-weight: 800; letter-spacing: .04em;
+}
+.cop-badge-espera { border-color: rgba(251, 191, 36, .5); color: #fcd34d; background: rgba(251, 191, 36, .08); }
+.cop-badge-etapa { border-color: rgba(52, 211, 153, .4); color: #6ee7b7; background: rgba(16, 185, 129, .08); }
+.cop-badge-score { border-color: rgba(56, 189, 248, .4); color: #7dd3fc; }
+
+.cop-etiquetas { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.cop-etiquetas:empty { display: none; }
+.cop-et {
+  display: inline-flex; align-items: center; gap: 5px;
+  border-radius: 999px !important; padding: 3px 9px !important; font-size: 11px !important;
+  opacity: .55;
+}
+.cop-et.activa { opacity: 1; border-color: var(--et-color, rgba(52, 211, 153, .5)) !important; }
+.cop-et-punto { width: 8px; height: 8px; border-radius: 999px; background: var(--et-color, #64748b); display: inline-block; }
+
+.cop-fila { display: flex; gap: 8px; }
+.cop-fila .cop-primario { flex: 1; }
+.cop-fila-wrap { display: flex; flex-wrap: wrap; gap: 6px; }
+#cop-extra { border-top: 1px solid rgba(51, 65, 85, .5); padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+
+#cop-plantillas { display: flex; flex-wrap: wrap; gap: 6px; }
+.cop-chip { border-radius: 999px !important; }
+
+/* ---- Tablero integrado (overlay sobre WhatsApp Web) ---- */
+#cop-tab {
+  position: fixed; inset: 0; z-index: 2147483647; background: #020617; color: #e2e8f0;
+  display: flex; flex-direction: column; font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px; line-height: 1.4;
+}
+#cop-tab[hidden], #cop-tab [hidden] { display: none !important; }
+#cop-tab > header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 12px 16px; }
+.cop-tab-titulo { font-size: 15px; font-weight: 800; color: #f1f5f9; margin-right: 4px; }
+#cop-tab-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.cop-tab-sep { flex: 1; }
+#cop-tab button {
+  background: transparent; color: #cbd5e1; border: 1px solid rgba(51, 65, 85, .5);
+  border-radius: 999px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+#cop-tab button:hover { background: #1e293b; }
+#cop-tab .activa { border-color: rgba(52, 211, 153, .5); color: #6ee7b7; background: rgba(16, 185, 129, .08); }
+.cop-tab-nota { color: #64748b; padding: 12px 20px; margin: 0; }
+
+#cop-tab-cols { display: flex; gap: 14px; align-items: flex-start; overflow: auto; padding: 4px 16px 24px; flex: 1; }
+.cop-tab-col { flex: 0 0 280px; }
+.cop-tab-col-ancha { flex: 0 0 min(92vw, 460px); }
+.cop-tab-col > header { display: flex; justify-content: space-between; align-items: baseline; padding: 0 4px 8px; }
+.cop-tab-col .etiqueta { font-size: 12px; font-weight: 700; color: #cbd5e1; display: inline-flex; align-items: center; gap: 6px; }
+.cop-tab-col .punto { width: 9px; height: 9px; border-radius: 999px; display: inline-block; }
+.cop-tab-col .n { font-size: 12px; color: #64748b; }
+.cop-tab-col ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+
+.cop-tab-tarjeta {
+  width: 100%; text-align: left; background: #0f172a !important; border: 1px solid rgba(51, 65, 85, .5) !important;
+  border-radius: 10px !important; padding: 12px !important; cursor: pointer; color: inherit; font: inherit;
+}
+.cop-tab-tarjeta:hover { background: #1e293b !important; }
+.cop-tab-tarjeta p { margin: 0; }
+.cop-tab-tarjeta .nombre { font-size: 14px; font-weight: 700; color: #f8fafc; display: flex; justify-content: space-between; gap: 6px; }
+.cop-tab-tarjeta .score { color: #6ee7b7; font-size: 11px; font-weight: 800; }
+.cop-tab-tarjeta .tel { margin-top: 2px; color: #64748b; font-size: 11px; }
+.cop-tab-tarjeta .badge {
+  display: inline-block; margin-top: 8px; border: 1px solid rgba(100, 116, 139, .5);
+  color: #94a3b8; border-radius: 5px; padding: 2px 7px; font-size: 10px; font-weight: 800; letter-spacing: .04em;
+}
+.cop-tab-tarjeta .badge.espera { border-color: rgba(251, 191, 36, .5); color: #fcd34d; background: rgba(251, 191, 36, .08); }
+.cop-tab-tarjeta .snippet { margin-top: 5px; color: #64748b; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cop-tab-tarjeta .fecha { margin-top: 5px; color: #475569; font-size: 10px; }

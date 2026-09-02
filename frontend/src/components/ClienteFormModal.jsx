@@ -15,13 +15,30 @@ function shiftMes(ym, n) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
+const MESES_LBL = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+const MEDIOS = ['YAPE', 'EFECTIVO', 'BCP', 'BN'];
+
+// Normaliza un numero pegado desde WhatsApp (+51, espacios, guiones) -> 9 digitos.
+function limpiarWhatsapp(v) {
+  const d = String(v).replace(/\D/g, '');
+  return d.length > 9 ? d.slice(-9) : d;
+}
+
+// 'YYYY-MM-DD' o 'YYYY-MM' -> "junio 2026".
+function mesLabel(iso) {
+  const [y, m] = String(iso).split('-').map(Number);
+  return `${MESES_LBL[m - 1]} ${y}`;
+}
+
 export default function ClienteFormModal({ cliente, diaCobroDefault, onClose, onGuardar, onEliminar, onAnularPago }) {
   const editando = Boolean(cliente?.id);
   const [form, setForm] = useState({
     nombre: cliente?.nombre ?? '',
     whatsapp: cliente?.whatsapp ?? '',
     monto: cliente?.monto ?? '',
-    dia_cobro: cliente?.dia_cobro ?? diaCobroDefault ?? 1,
+    dia_cobro: cliente?.dia_cobro ?? new Date().getDate(), // dia de creacion = dia que paga
     pagado_hasta: cliente ? aMonthInput(cliente.pagado_hasta) : mesActual(),
     activo: cliente?.activo ?? true,
     periodo: cliente?.periodo ?? 'MENSUAL',
@@ -30,11 +47,20 @@ export default function ClienteFormModal({ cliente, diaCobroDefault, onClose, on
   });
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
+  const [tarifaDesde, setTarifaDesde] = useState(mesActual());
+  // Alta: normalmente el cliente ya pago al registrarse -> registra un pago real.
+  const [yaPago, setYaPago] = useState(true);
+  const [pagoMonto, setPagoMonto] = useState('');
+  const [pagoMedio, setPagoMedio] = useState('YAPE');
 
   const set = (campo) => (e) => {
     const v = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
     setForm((f) => ({ ...f, [campo]: v }));
   };
+
+  // Cambio de cuota al editar: dispara el flujo de tarifa con fecha de vigencia.
+  const cambioTarifa = editando && form.monto !== ''
+    && (Number(form.monto) !== Number(cliente.monto) || form.periodo !== cliente.periodo);
 
   async function submit(e) {
     e.preventDefault();
@@ -44,18 +70,28 @@ export default function ClienteFormModal({ cliente, diaCobroDefault, onClose, on
       return;
     }
     setGuardando(true);
+    // Alta "ya pago": se crea cubierto hasta el mes anterior y el pago inicial
+    // lo lleva al mes actual (queda al dia, con ingreso e historial reales).
+    const conPago = !editando && yaPago;
+    // Base = mes anterior a HOY (no el pagado_hasta que el tap de plan pudo inflar);
+    // el pago avanza el bloque del plan (mensual +1, anual +12) y lo deja al dia.
+    const pagadoHasta = conPago ? `${shiftMes(mesActual(), -1)}-01` : `${form.pagado_hasta}-01`;
+    const pagoInicial = conPago
+      ? { monto_total: pagoMonto !== '' ? Number(pagoMonto) : Number(form.monto), medio: pagoMedio }
+      : null;
     try {
       await onGuardar({
         nombre: form.nombre.trim(),
         whatsapp: String(form.whatsapp).trim(),
         monto: Number(form.monto),
         dia_cobro: Number(form.dia_cobro),
-        pagado_hasta: `${form.pagado_hasta}-01`,
+        pagado_hasta: pagadoHasta,
         activo: Boolean(form.activo),
         periodo: form.periodo,
         notas: form.notas.trim() || null,
         cobro_vencido: Boolean(form.cobro_vencido),
-      }, cliente?.id);
+        ...(cambioTarifa ? { tarifa_desde: `${tarifaDesde}-01` } : {}),
+      }, cliente?.id, pagoInicial);
     } catch (err) {
       setError(err.message);
       setGuardando(false);
@@ -100,8 +136,10 @@ export default function ClienteFormModal({ cliente, diaCobroDefault, onClose, on
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label htmlFor="whatsapp" className={labelCls}>WhatsApp (9 dig.)</label>
-            <input id="whatsapp" type="tel" inputMode="numeric" maxLength={9} required
-              value={form.whatsapp} onChange={set('whatsapp')} placeholder="9XXXXXXXX" className={`${inputCls} tabular`} />
+            <input id="whatsapp" type="tel" inputMode="numeric" required
+              value={form.whatsapp}
+              onChange={(e) => setForm((f) => ({ ...f, whatsapp: limpiarWhatsapp(e.target.value) }))}
+              placeholder="9XXXXXXXX" className={`${inputCls} tabular`} />
           </div>
           <div>
             <label htmlFor="monto" className={labelCls}>Monto (S/)</label>
@@ -137,6 +175,60 @@ export default function ClienteFormModal({ cliente, diaCobroDefault, onClose, on
           </button>
         </div>
 
+        {!editando && (
+          <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/30 px-4 py-3 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-emerald-100">Ya pagó al registrarse</p>
+                <p className="text-xs text-emerald-200/70">Registra el pago y lo deja al día este mes.</p>
+              </div>
+              <button
+                type="button" role="switch" aria-checked={yaPago} aria-label="Ya pagó al registrarse"
+                onClick={() => setYaPago((v) => !v)}
+                className={`relative w-12 h-7 rounded-full transition-colors cursor-pointer shrink-0 ${yaPago ? 'bg-emerald-500' : 'bg-slate-600'}`}
+              >
+                <span className={`absolute top-1 left-1 w-5 h-5 rounded-full bg-white transition-transform ${yaPago ? 'translate-x-5' : ''}`} />
+              </button>
+            </div>
+            {yaPago && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="pago_monto" className="block text-xs font-medium text-emerald-200 mb-1">Monto pagado</label>
+                  <input
+                    id="pago_monto" type="number" min="0" step="0.01" value={pagoMonto}
+                    onChange={(e) => setPagoMonto(e.target.value)}
+                    placeholder={form.monto ? `S/ ${form.monto}` : 'Cuota'}
+                    className={`${inputCls} tabular`}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="pago_medio" className="block text-xs font-medium text-emerald-200 mb-1">Método</label>
+                  <select id="pago_medio" value={pagoMedio} onChange={(e) => setPagoMedio(e.target.value)} className={inputCls}>
+                    {MEDIOS.map((m) => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {cambioTarifa && (
+          <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 px-4 py-3">
+            <label htmlFor="tarifa_desde" className="block text-sm font-medium text-amber-200 mb-1.5">
+              La nueva tarifa (S/ {form.monto}) rige desde
+            </label>
+            <input
+              id="tarifa_desde" type="month" value={tarifaDesde}
+              onChange={(e) => setTarifaDesde(e.target.value)}
+              className={`${inputCls} tabular`}
+            />
+            <p className="mt-1 text-xs text-amber-200/70">
+              Los meses anteriores se cobran a la tarifa vieja (S/ {cliente.monto}); desde este mes, S/ {form.monto}.
+            </p>
+          </div>
+        )}
+
+        {(editando || !yaPago) && (
         <div>
           <label htmlFor="pagado_hasta" className={labelCls}>Pagado hasta</label>
           <div className="flex items-stretch gap-2">
@@ -164,6 +256,7 @@ export default function ClienteFormModal({ cliente, diaCobroDefault, onClose, on
             Los botones avanzan de a {paso} mes(es), segun el plan ({periodoMeta(form.periodo).label}).
           </p>
         </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium text-slate-300 mb-1.5">Plan habitual</label>
@@ -225,6 +318,27 @@ export default function ClienteFormModal({ cliente, diaCobroDefault, onClose, on
 
         {error && <p className="text-sm text-red-400">{error}</p>}
       </form>
+
+      {editando && Array.isArray(cliente.tarifas) && cliente.tarifas.length > 1 && (
+        <div className="mt-6 pt-5 border-t border-slate-700/60">
+          <h3 className="text-sm font-semibold text-slate-300 mb-3">Historial de tarifas</h3>
+          <ul className="space-y-1.5">
+            {[...cliente.tarifas]
+              .sort((a, b) => String(b.desde).localeCompare(String(a.desde)))
+              .map((t, i) => (
+                <li key={i} className="flex items-center justify-between text-sm rounded-lg bg-slate-800/50 px-3 py-2">
+                  <span className="text-slate-400">
+                    {t.desde === '2000-01-01' ? 'Tarifa inicial' : `Desde ${mesLabel(t.desde)}`}
+                  </span>
+                  <span className="tabular font-semibold text-slate-200">
+                    {soles(t.monto)}
+                    {t.periodo !== 'MENSUAL' ? ` · ${String(t.periodo).toLowerCase()}` : ''}
+                  </span>
+                </li>
+              ))}
+          </ul>
+        </div>
+      )}
 
       {editando && (
         <div className="mt-6 pt-5 border-t border-slate-700/60">

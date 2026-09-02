@@ -58,6 +58,23 @@ CREATE INDEX idx_pagos_cliente ON pagos(cliente_id);
 CREATE INDEX idx_clientes_activo ON clientes(activo);
 
 -- ----------------------------------------------------------------
+-- Tarifas (historial): "desde <mes> la cuota es <monto>/<periodo>".
+-- Cada mes de cobertura/deuda se cobra a la tarifa VIGENTE ese mes.
+-- La tarifa mas antigua cubre hacia atras. clientes.monto = tarifa actual.
+-- ----------------------------------------------------------------
+CREATE TABLE tarifas (
+    id          SERIAL PRIMARY KEY,
+    cliente_id  INTEGER     NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
+    monto       NUMERIC(10,2) NOT NULL CHECK (monto >= 0),
+    periodo     TEXT        NOT NULL DEFAULT 'MENSUAL'
+                CHECK (periodo IN ('MENSUAL','TRIMESTRAL','SEMESTRAL','ANUAL')),
+    -- Dia 1 del mes desde el que rige esta tarifa.
+    desde       DATE        NOT NULL,
+    creado_en   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_tarifas_cliente ON tarifas(cliente_id, desde);
+
+-- ----------------------------------------------------------------
 -- Config (clave/valor) - p.ej. plantilla del mensaje de WhatsApp
 -- ----------------------------------------------------------------
 CREATE TABLE config (
@@ -81,5 +98,87 @@ CREATE TABLE recordatorios (
     tipo       TEXT    NOT NULL DEFAULT 'whatsapp',
     creado_en  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ----------------------------------------------------------------
+-- Leads ("posibles"): personas que escriben por WhatsApp preguntando por
+-- SysFarma (el producto). Base para el seguimiento con el copiloto de IA.
+-- ----------------------------------------------------------------
+CREATE TABLE leads (
+    id                 SERIAL PRIMARY KEY,
+    -- Telefono en formato Evolution (digitos con codigo pais, ej. 51987654321).
+    telefono           VARCHAR(20)  NOT NULL UNIQUE,
+    -- JID interno "@lid" de WhatsApp (identidad nueva, sin telefono visible en
+    -- el JID) cuando WhatsApp enruta a este contacto por ahi en vez de por
+    -- telefono. Permite resolver telefono en el webhook cuando llega asi.
+    lid                VARCHAR(40)  UNIQUE,
+    nombre             TEXT,
+    -- nuevo|contactado|atendido|convertido|descartado
+    estado             TEXT         NOT NULL DEFAULT 'nuevo',
+    -- sin_clasificar (recien importado, en espera) | posible (prospecto real,
+    -- entra al copiloto/IA) | conocido (amigo/cliente actual, se ignora para
+    -- siempre). Los que escriben de verdad entran directo como 'posible'.
+    categoria          TEXT         NOT NULL DEFAULT 'sin_clasificar'
+                       CHECK (categoria IN ('sin_clasificar','posible','conocido')),
+    foto_url           TEXT, -- foto de perfil de WhatsApp (URL directa, no se descarga)
+    ciudad             TEXT,
+    ultimo_mensaje     TEXT,
+    mensajes_in        INTEGER      NOT NULL DEFAULT 0,
+    primer_contacto    TIMESTAMPTZ,
+    ultimo_contacto    TIMESTAMPTZ,
+    ultimo_seguimiento TIMESTAMPTZ,
+    notas              TEXT,
+    -- Estado derivado por el copiloto. Se puede reconstruir desde el historial.
+    memoria            JSONB,
+    memoria_hasta      INTEGER NOT NULL DEFAULT 0,
+    score              SMALLINT CHECK (score IS NULL OR (score >= 0 AND score <= 100)),
+    score_motivo       TEXT,
+    creado_en          TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_leads_estado ON leads(estado);
+CREATE INDEX idx_leads_ultimo_contacto ON leads(ultimo_contacto DESC);
+
+-- ----------------------------------------------------------------
+-- Conversacion por WhatsApp con cada lead. direccion: in = el lead escribio,
+-- out = respondimos (tu o el copiloto). wa_message_id dedupe del webhook.
+-- ----------------------------------------------------------------
+CREATE TABLE lead_mensajes (
+    id            SERIAL PRIMARY KEY,
+    lead_id       INTEGER     NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+    direccion     TEXT        NOT NULL CHECK (direccion IN ('in','out')),
+    cuerpo        TEXT        NOT NULL,
+    -- id del mensaje en WhatsApp (evita re-procesar entregas repetidas). NULL en salientes propios.
+    wa_message_id TEXT        UNIQUE,
+    wa_id         TEXT,
+    tipo          TEXT,
+    media_archivo TEXT,
+    media_mime    TEXT,
+    media_nombre  TEXT,
+    media_texto   TEXT,
+    automatico    BOOLEAN     NOT NULL DEFAULT FALSE,
+    fecha         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_lead_mensajes_lead ON lead_mensajes(lead_id, id);
+
+-- ----------------------------------------------------------------
+-- Feedback del copiloto. No es entrenamiento automatico del modelo: es el
+-- dataset supervisado que se construye con lo que Jean acepta, corrige y con
+-- el resultado real de cada conversacion.
+-- ----------------------------------------------------------------
+CREATE TABLE sugerencias (
+    id                  SERIAL PRIMARY KEY,
+    lead_id             INTEGER NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+    sugerido            TEXT NOT NULL,
+    enviado             TEXT,
+    editado             BOOLEAN,
+    etapa               TEXT,
+    contexto            TEXT,
+    resultado            TEXT CHECK (resultado IS NULL OR resultado IN
+                         ('sin_respuesta','respondio','demo','cotizacion','negociacion','pago','rechazo','otro')),
+    resultado_nota      TEXT,
+    resultado_at        TIMESTAMPTZ,
+    fecha               TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_sugerencias_lead_fecha ON sugerencias(lead_id, fecha DESC);
+CREATE INDEX idx_sugerencias_resultado ON sugerencias(resultado) WHERE resultado IS NOT NULL;
 
 CREATE INDEX idx_recordatorios_cliente ON recordatorios(cliente_id);

@@ -12,8 +12,8 @@ export default function Login({ onLogin }) {
     setError('');
     setEntrando(true);
     try {
-      await api.login(email.trim(), password);
-      onLogin();
+      const sesion = await api.login(email.trim(), password);
+      onLogin(sesion);
     } catch (err) {
       setError(err.message || 'No se pudo entrar.');
       setEntrando(false);

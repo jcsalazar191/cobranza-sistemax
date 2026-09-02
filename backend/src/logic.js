@@ -35,6 +35,11 @@ export function etiquetaMes(fecha) {
   return `${MESES[d.getMonth()]} ${d.getFullYear()}`;
 }
 
+// Diferencia en meses (hasta - desde). Positivo si `hasta` es posterior.
+export function diffMeses(desde, hasta) {
+  return indiceMes(aPrimerDiaMes(hasta)) - indiceMes(aPrimerDiaMes(desde));
+}
+
 // Se cobra POR ADELANTADO con plazo hasta un "dia de gracia" de cada mes.
 // Hasta ese dia (inclusive) el mes en curso todavia esta "en plazo" (no vencido).
 // Es CONFIGURABLE desde Perfil (se guarda en config y se sincroniza aca).
@@ -108,29 +113,87 @@ export function convertirSaldo(periodo, monto, dinero) {
 // tarifa anterior (al cambiar la cuota); solo se convierte el dinero NO aplicado a
 // la tarifa actual, para no re-valorar lo ya pagado. Sigue siendo deterministico
 // (registrar/anular pagos no descuadra).
+// LEGADO: modelo de tarifa unica. El modelo por fechas usa avanzarCobertura.
 export function recomputarCobertura(coberturaBase, periodo, monto, dineroTotal, dineroAplicado = 0) {
   const disponible = Math.max(0, Number(dineroTotal) - Number(dineroAplicado || 0));
   const { mesesAvance, saldo } = convertirSaldo(periodo, monto, disponible);
   return { pagado_hasta: aISODia1(sumarMeses(coberturaBase, mesesAvance)), saldo };
 }
 
+// ============================================================
+//  Modelo por FECHAS: historial de tarifas ("desde X mes = S/Y")
+// ============================================================
+// `tarifas` = [{ monto, periodo, desde:'YYYY-MM-DD' }] (no requiere estar ordenado).
+// Cada mes se cobra a la tarifa VIGENTE ese mes: la de mayor `desde` <= ese mes.
+// La tarifa mas antigua se extiende hacia atras (cubre meses previos a la primera).
+
+// Tarifa vigente en un mes dado. Si no hay tarifas, usa el fallback (monto/periodo del cliente).
+export function rateEnMes(mes, tarifas, fallbackMonto, fallbackPeriodo = 'MENSUAL') {
+  const lista = Array.isArray(tarifas) ? tarifas : [];
+  if (lista.length === 0) return { monto: Number(fallbackMonto) || 0, periodo: fallbackPeriodo };
+  const orden = [...lista].sort((a, b) => indiceMes(aPrimerDiaMes(a.desde)) - indiceMes(aPrimerDiaMes(b.desde)));
+  const mIdx = indiceMes(aPrimerDiaMes(mes));
+  let elegida = orden[0]; // la mas antigua cubre hacia atras
+  for (const t of orden) {
+    if (indiceMes(aPrimerDiaMes(t.desde)) <= mIdx) elegida = t;
+  }
+  return { monto: Number(elegida.monto) || 0, periodo: elegida.periodo || 'MENSUAL' };
+}
+
+// Avanza la cobertura desde coberturaBase consumiendo el dinero total, cobrando cada
+// bloque a la tarifa vigente del mes en que empieza. Devuelve pagado_hasta y saldo.
+// Deterministico (registrar/anular pagos recalcula desde cero sin descuadre).
+export function avanzarCobertura(coberturaBase, dineroTotal, tarifas, fallbackMonto, fallbackPeriodo = 'MENSUAL') {
+  let rem = Number(dineroTotal) || 0;
+  let mes = aPrimerDiaMes(coberturaBase);
+  let av = 0;
+  for (let i = 0; i < 1200; i += 1) { // tope 100 anios: evita bucle infinito
+    const { monto, periodo } = rateEnMes(mes, tarifas, fallbackMonto, fallbackPeriodo);
+    const { meses, costo } = bloquePlan(periodo, monto);
+    if (costo <= 0 || rem < costo) break; // tarifa 0 o no alcanza otro bloque
+    rem -= costo;
+    mes = sumarMeses(mes, meses);
+    av += meses;
+  }
+  return { pagado_hasta: aISODia1(mes), saldo: Number(rem.toFixed(2)), mesesAvance: av };
+}
+
+// Deuda bruta y meses a pagar recorriendo cada mes vencido a su tarifa vigente.
+// `debe` = meses vencidos (de mesesDebe). Empieza en pagado_hasta + 1.
+function deudaPorFechas(pagadoHasta, debe, tarifas, fallbackMonto, fallbackPeriodo) {
+  let bruta = 0; let mesesAPagar = 0;
+  let mes = sumarMeses(pagadoHasta, 1); // primer mes vencido
+  let restantes = debe;
+  for (let i = 0; i < 1200 && restantes > 0; i += 1) {
+    const { monto, periodo } = rateEnMes(mes, tarifas, fallbackMonto, fallbackPeriodo);
+    const plan = PLAN_PERIODO[periodo];
+    if (plan) {
+      // Semestral/anual: al vencer se cobra el periodo completo con descuento.
+      bruta += (plan.meses - plan.descuento) * monto;
+      mesesAPagar += plan.meses;
+      mes = sumarMeses(mes, plan.meses);
+      restantes -= plan.meses;
+    } else {
+      bruta += monto;
+      mesesAPagar += 1;
+      mes = sumarMeses(mes, 1);
+      restantes -= 1;
+    }
+  }
+  return { deudaBruta: Number(bruta.toFixed(2)), mesesAPagar };
+}
+
 // Enriquece una fila de cliente con deuda/estado calculados.
 export function enriquecerCliente(c, hoy = new Date()) {
   const debe = mesesDebe(c.pagado_hasta, hoy, Number(c.dia_cobro) || 1, Boolean(c.cobro_vencido));
   const monto = Number(c.monto);
-  const plan = PLAN_PERIODO[c.periodo];
+  const tarifas = Array.isArray(c.tarifas) ? c.tarifas : [];
 
-  let deudaBruta; let mesesAPagar;
-  if (plan && debe > 0) {
-    // Semestral/anual: al vencerse, se cobra el/los periodo(s) completo(s) con descuento.
-    const periodos = Math.ceil(debe / plan.meses);
-    mesesAPagar = periodos * plan.meses;                  // meses que cubre la regularizacion
-    deudaBruta = Number((periodos * (plan.meses - plan.descuento) * monto).toFixed(2));
-  } else {
-    // Mensual/trimestral: mes a mes.
-    mesesAPagar = debe;
-    deudaBruta = Number((debe * monto).toFixed(2));
-  }
+  // Cada mes vencido se cobra a la tarifa vigente ese mes (modelo por fechas).
+  // Sin tarifas cargadas, rateEnMes usa monto/periodo del cliente (= comportamiento previo).
+  const { deudaBruta, mesesAPagar } = debe > 0
+    ? deudaPorFechas(c.pagado_hasta, debe, tarifas, monto, c.periodo)
+    : { deudaBruta: 0, mesesAPagar: 0 };
 
   // Modelo "saldo a favor": los pagos parciales bajan la deuda S/ por S/.
   const saldo = Number(c.saldo) || 0;
@@ -146,7 +209,8 @@ export function enriquecerCliente(c, hoy = new Date()) {
     deuda,                      // deuda neta (lo que realmente falta pagar)
     estado: estado(debe),
     meses_cobertura: mesesCobertura(c.pagado_hasta, hoy),
-    // Incluye el dia de cobro del cliente: "15 de junio 2026".
-    pagado_hasta_label: `${Number(c.dia_cobro) || 1} de ${etiquetaMes(c.pagado_hasta)}`,
+    // Cubierto HASTA su proximo cobro = dia de cobro del mes siguiente al ultimo
+    // mes cubierto. Ej: pago el mes de agosto, dia_cobro 19 -> "19 de septiembre".
+    pagado_hasta_label: `${Number(c.dia_cobro) || 1} de ${etiquetaMes(sumarMeses(c.pagado_hasta, 1))}`,
   };
 }

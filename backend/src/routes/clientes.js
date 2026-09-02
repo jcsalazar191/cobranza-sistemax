@@ -1,8 +1,9 @@
 import { Router } from 'express';
-import { query } from '../db.js';
+import { query, pool } from '../db.js';
 import {
-  enriquecerCliente, aISODia1, sumarMeses, convertirSaldo, recomputarCobertura,
+  enriquecerCliente, aISODia1, sumarMeses, avanzarCobertura, diffMeses,
 } from '../logic.js';
+import { tarifasDe, tarifasMap } from '../tarifas.js';
 import {
   reqStr, optStr, reqWhatsapp, reqNum, reqInt, reqFecha, reqBool, optEnum, ValidationError,
 } from '../validate.js';
@@ -27,7 +28,8 @@ clientesRouter.get('/', async (req, res, next) => {
        FROM clientes c
        ORDER BY c.nombre`,
     );
-    const data = rows.map((c) => enriquecerCliente(c));
+    const tmap = await tarifasMap();
+    const data = rows.map((c) => enriquecerCliente({ ...c, tarifas: tmap.get(c.id) || [] }));
     data.sort((a, b) => b.deuda - a.deuda || a.nombre.localeCompare(b.nombre));
     res.json(data);
   } catch (err) { next(err); }
@@ -37,7 +39,8 @@ clientesRouter.get('/', async (req, res, next) => {
 clientesRouter.get('/resumen', async (req, res, next) => {
   try {
     const { rows } = await query('SELECT * FROM clientes');
-    const activos = rows.filter((c) => c.activo).map((c) => enriquecerCliente(c));
+    const tmap = await tarifasMap();
+    const activos = rows.filter((c) => c.activo).map((c) => enriquecerCliente({ ...c, tarifas: tmap.get(c.id) || [] }));
     const deuda_total = activos.reduce((s, c) => s + c.deuda, 0);
     const morosos = activos.filter((c) => c.meses_debe >= 1).length;
     const criticos = activos.filter((c) => c.estado === 3).length;
@@ -74,7 +77,8 @@ clientesRouter.get('/:id', async (req, res, next) => {
       'SELECT * FROM pagos WHERE cliente_id = $1 ORDER BY fecha DESC, id DESC',
       [req.params.id],
     );
-    res.json({ ...enriquecerCliente(rows[0]), pagos });
+    const tarifas = await tarifasDe(req.params.id);
+    res.json({ ...enriquecerCliente({ ...rows[0], tarifas }), pagos, tarifas });
   } catch (err) { next(err); }
 });
 
@@ -92,60 +96,103 @@ function parseClienteBody(body) {
   };
 }
 
+// Tarifa base "desde siempre" (cubre todos los meses previos a cualquier cambio).
+const TARIFA_BASE_DESDE = '2000-01-01';
+
 // POST /api/clientes  -> crea cliente. Sin pagos: cobertura_base = pagado_hasta, saldo 0.
+// Crea tambien la tarifa base (monto actual desde siempre) para el modelo por fechas.
 clientesRouter.post('/', async (req, res, next) => {
+  const client = await pool.connect();
   try {
     const c = parseClienteBody(req.body);
-    const { rows } = await query(
+    await client.query('BEGIN');
+    const { rows } = await client.query(
       `INSERT INTO clientes (nombre, whatsapp, monto, dia_cobro, pagado_hasta, cobertura_base, saldo, activo, periodo, notas, cobro_vencido)
        VALUES ($1,$2,$3,$4,$5,$5,0,$6,$7,$8,$9) RETURNING *`,
       [c.nombre, c.whatsapp, c.monto, c.dia_cobro, c.pagado_hasta, c.activo, c.periodo, c.notas, c.cobro_vencido],
     );
-    res.status(201).json(enriquecerCliente(rows[0]));
-  } catch (err) { next(err); }
+    const nuevo = rows[0];
+    await client.query(
+      'INSERT INTO tarifas (cliente_id, monto, periodo, desde) VALUES ($1,$2,$3,$4)',
+      [nuevo.id, nuevo.monto, nuevo.periodo, TARIFA_BASE_DESDE],
+    );
+    await client.query('COMMIT');
+    const tarifas = [{ monto: nuevo.monto, periodo: nuevo.periodo, desde: TARIFA_BASE_DESDE }];
+    res.status(201).json(enriquecerCliente({ ...nuevo, tarifas }));
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    next(err);
+  } finally {
+    client.release();
+  }
 });
 
-// PUT /api/clientes/:id  -> edita cliente. El "pagado_hasta" que manda el usuario
-// es la cobertura deseada; calculamos cobertura_base para que el modelo de saldo
-// (con los pagos existentes) la reproduzca, y recalculamos saldo.
+// PUT /api/clientes/:id  -> edita cliente (modelo por FECHAS).
+// - Si cambia la cuota/periodo: se agrega una tarifa "desde <mes>" al historial
+//   (default: mes actual; opcional body.tarifa_desde). Los meses previos conservan
+//   su tarifa; la nueva rige desde esa fecha.
+// - El pagado_hasta enviado es la cobertura deseada: si el usuario la mueve
+//   manualmente, se desplaza la cobertura_base igual; luego se recalcula con el
+//   dinero pagado y el historial de tarifas (deterministico).
 clientesRouter.put('/:id', async (req, res, next) => {
+  const client = await pool.connect();
   try {
     const c = parseClienteBody(req.body);
-    const { rows: cur } = await query(
-      'SELECT monto, periodo, saldo, dinero_aplicado FROM clientes WHERE id = $1', [req.params.id],
+    const tarifaDesde = req.body.tarifa_desde !== undefined && req.body.tarifa_desde !== ''
+      ? aISODia1(reqFecha(req.body, 'tarifa_desde'))
+      : null;
+    await client.query('BEGIN');
+    const { rows: cur } = await client.query(
+      'SELECT monto, periodo, pagado_hasta, cobertura_base FROM clientes WHERE id = $1 FOR UPDATE', [req.params.id],
     );
-    if (cur.length === 0) return res.status(404).json({ error: 'Cliente no encontrado.' });
+    if (cur.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Cliente no encontrado.' });
+    }
     const prev = cur[0];
-    const { rows: sumRows } = await query(
+    const { rows: sumRows } = await client.query(
       'SELECT COALESCE(SUM(monto_total), 0)::float AS t FROM pagos WHERE cliente_id = $1', [req.params.id],
     );
     const total = Number(sumRows[0].t);
 
     const cambioTarifa = Number(prev.monto) !== Number(c.monto) || prev.periodo !== c.periodo;
-    let cobertura_base;
-    let dinero_aplicado;
-    if (cambioTarifa) {
-      // SELLADO: lo ya cubierto/pagado queda a la tarifa VIEJA (se marca como dinero
-      // ya aplicado); la nueva tarifa solo afecta pagos futuros y meses aun no pagados.
-      cobertura_base = c.pagado_hasta;
-      dinero_aplicado = Math.max(0, Number((total - Number(prev.saldo || 0)).toFixed(2)));
-    } else {
-      // Sin cambio de tarifa: conserva el dinero_aplicado y reproduce el pagado_hasta enviado.
-      dinero_aplicado = Number(prev.dinero_aplicado) || 0;
-      const disponible = Math.max(0, total - dinero_aplicado);
-      const adv = convertirSaldo(c.periodo, c.monto, disponible).mesesAvance;
-      cobertura_base = aISODia1(sumarMeses(c.pagado_hasta, -adv));
-    }
-    const { pagado_hasta, saldo } = recomputarCobertura(cobertura_base, c.periodo, c.monto, total, dinero_aplicado);
+    const desde = tarifaDesde || aISODia1(new Date()); // mes actual por defecto
 
-    const { rows } = await query(
-      `UPDATE clientes SET nombre=$1, whatsapp=$2, monto=$3, dia_cobro=$4,
-              pagado_hasta=$5, cobertura_base=$6, saldo=$7, activo=$8, periodo=$9, notas=$10, cobro_vencido=$11, dinero_aplicado=$12
-       WHERE id=$13 RETURNING *`,
-      [c.nombre, c.whatsapp, c.monto, c.dia_cobro, pagado_hasta, cobertura_base, saldo, c.activo, c.periodo, c.notas, c.cobro_vencido, dinero_aplicado, req.params.id],
+    // Historial de tarifas vigente (incluida la nueva si cambia la cuota).
+    const { rows: tRows } = await client.query(
+      "SELECT monto, periodo, to_char(desde, 'YYYY-MM-DD') AS desde FROM tarifas WHERE cliente_id = $1 ORDER BY desde, id", [req.params.id],
     );
-    res.json(enriquecerCliente(rows[0]));
-  } catch (err) { next(err); }
+    const tarifas = cambioTarifa
+      ? [...tRows, { monto: c.monto, periodo: c.periodo, desde }]
+      : tRows;
+
+    // Desplaza la cobertura_base si el usuario movio manualmente el pagado_hasta.
+    const base0 = prev.cobertura_base || prev.pagado_hasta;
+    const delta = diffMeses(prev.pagado_hasta, c.pagado_hasta);
+    const cobertura_base = aISODia1(sumarMeses(base0, delta));
+
+    const { pagado_hasta, saldo } = avanzarCobertura(cobertura_base, total, tarifas, c.monto, c.periodo);
+
+    if (cambioTarifa) {
+      await client.query(
+        'INSERT INTO tarifas (cliente_id, monto, periodo, desde) VALUES ($1,$2,$3,$4)',
+        [req.params.id, c.monto, c.periodo, desde],
+      );
+    }
+    const { rows } = await client.query(
+      `UPDATE clientes SET nombre=$1, whatsapp=$2, monto=$3, dia_cobro=$4,
+              pagado_hasta=$5, cobertura_base=$6, saldo=$7, activo=$8, periodo=$9, notas=$10, cobro_vencido=$11, dinero_aplicado=0
+       WHERE id=$12 RETURNING *`,
+      [c.nombre, c.whatsapp, c.monto, c.dia_cobro, pagado_hasta, cobertura_base, saldo, c.activo, c.periodo, c.notas, c.cobro_vencido, req.params.id],
+    );
+    await client.query('COMMIT');
+    res.json(enriquecerCliente({ ...rows[0], tarifas }));
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    next(err);
+  } finally {
+    client.release();
+  }
 });
 
 // DELETE /api/clientes/:id  -> elimina cliente SOLO si no tiene pagos.

@@ -296,7 +296,7 @@ export default function ChatCobro({ clientes, geminiConfigurado, autoGrabar, onC
         dia_cobro: n.dia_cobro || 1, pagado_hasta: phInicial, activo: true, periodo: n.periodo || 'MENSUAL', notas: null,
       });
       if (pagoIni && c?.id) {
-        const rp = await api.registrarPago({ cliente_id: c.id, monto_total: pagoIni });
+        const rp = await api.registrarPago({ cliente_id: c.id, monto_total: pagoIni, medio: 'YAPE' });
         const cli = rp?.cliente;
         const estado = cli ? (Number(cli.deuda) > 0 ? `Aún debe ${soles(cli.deuda)}.` : 'Quedó al día.') : '';
         pushBot(`✅ Creé a ${n.nombre} y registré su pago de ${soles(pagoIni)}. ${estado}`.trim());
