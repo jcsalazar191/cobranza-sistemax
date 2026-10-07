@@ -34,7 +34,7 @@ export function aMonthInput(iso) {
 export const PLANTILLA_DEFAULT =
   'Hola {nombre}, le recordamos su pago pendiente de S/ {deuda}, correspondiente a {rango_meses}. Gracias.';
 export const PLANTILLA_ALDIA_DEFAULT =
-  'Hola {nombre}, le recordamos que su proximo vencimiento es {cubierto}. Gracias.';
+  'Hola {nombre}, le recordamos que su proximo pago es {cubierto}. Gracias.';
 
 // Formatea fechas YYYY-MM-DD sin conversion UTC para evitar cambios de dia en moviles.
 export function fechaLegible(iso) {
@@ -78,6 +78,23 @@ export function rangoMeses(pagadoHastaIso, mesesDebe) {
   return `${ni} de ${ini.getFullYear()} a ${nf} de ${fin.getFullYear()}`;
 }
 
+// Una sola frase principal: el periodo pendiente o la siguiente fecha de pago.
+// Evita mostrar simultaneamente el mes cubierto y la fecha en que inicia el cobro.
+export function resumenEstadoPago(cliente, hoy = new Date()) {
+  if (Number(cliente?.deuda) > 0) {
+    const meses = Number(cliente.meses_a_pagar) || Number(cliente.meses_debe) || 0;
+    const periodo = rangoMeses(cliente.pagado_hasta, meses);
+    return periodo ? `Pendiente: ${periodo}` : 'Tiene un pago pendiente';
+  }
+
+  const fecha = String(cliente?.fecha_vencimiento ?? '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return 'Cuenta al día';
+  const hoyLocal = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
+  if (fecha < hoyLocal) return 'Cuenta al día';
+  if (fecha === hoyLocal) return 'Pago programado para hoy';
+  return `Próximo pago: ${fechaLegible(fecha)}`;
+}
+
 // Reemplaza los placeholders de la plantilla con los datos del cliente.
 export function aplicarPlantilla(template, cliente) {
   const deudaFmt = fmt.format(Number(cliente.deuda) || 0);
@@ -112,7 +129,7 @@ export function linkRecibo(cliente, pago) {
   const fecha = String(pago?.fecha ?? '').slice(0, 10);
   const vencimiento = cliente?.fecha_vencimiento_label ?? cliente?.pagado_hasta_label ?? '';
   const msg = `Hola ${cliente.nombre ?? ''}, confirmamos su pago de S/ ${monto}${fecha ? ` recibido el ${fecha}` : ''}.`
-    + (vencimiento ? ` Su proximo vencimiento es ${vencimiento}.` : '')
+    + (vencimiento ? ` Su proximo pago es ${vencimiento}.` : '')
     + ' Gracias por su pago!';
   return `https://wa.me/51${cliente.whatsapp}?text=${encodeURIComponent(msg)}`;
 }

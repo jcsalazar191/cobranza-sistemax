@@ -159,7 +159,7 @@ chatCobroRouter.post('/', async (req, res, next) => {
     const { rows } = await query('SELECT * FROM clientes ORDER BY nombre');
     const clientes = rows.map((c) => enriquecerCliente(c));
     const lista = clientes
-      .map((c) => `${c.id}: ${c.nombre} | ${c.periodo} | cuota S/${c.monto}/mes | ${c.activo ? 'activo' : 'inactivo'} | debe S/${c.deuda} (${c.meses_debe}m) | ${c.deuda > 0 ? 'vencido desde' : 'proximo vencimiento'} ${c.fecha_vencimiento_label}`)
+      .map((c) => `${c.id}: ${c.nombre} | ${c.periodo} | cuota S/${c.monto}/mes | ${c.activo ? 'activo' : 'inactivo'} | debe S/${c.deuda} (${c.meses_debe}m) | ${c.deuda > 0 ? 'periodos pendientes' : 'proximo pago'} ${c.fecha_vencimiento_label}`)
       .join('\n');
 
     // Totales YA calculados por el codigo (para que el asistente NO sume a mano

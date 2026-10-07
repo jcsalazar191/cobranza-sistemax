@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import Modal from './Modal.jsx';
 import { api } from '../api.js';
-import { soles, aMonthInput, PERIODOS, periodoMeta, linkRecibo, rangoMeses, fechaLegible } from '../lib/ui.js';
+import { soles, aMonthInput, PERIODOS, periodoMeta, linkRecibo, resumenEstadoPago } from '../lib/ui.js';
 import { IconTrash, IconWhatsapp } from './Icons.jsx';
 
 function mesActual() {
@@ -257,11 +257,10 @@ export default function ClienteFormModal({ cliente, diaCobroDefault, onClose, on
                 <p className="text-xs uppercase tracking-wide text-amber-300/80">Así quedaría</p>
                 {sim.deuda > 0 ? (
                   <p>
-                    Debe <b className="tabular">{soles(sim.deuda)}</b>
-                    {sim.meses_a_pagar > 0 && <> por {rangoMeses(sim.pagado_hasta, sim.meses_a_pagar)}</>}
+                    Debe <b className="tabular">{soles(sim.deuda)}</b>. {resumenEstadoPago(sim)}.
                   </p>
                 ) : (
-                  <p>Sin deuda. Próximo vencimiento: {fechaLegible(sim.fecha_vencimiento) || sim.fecha_vencimiento_label || sim.pagado_hasta_label}.</p>
+                  <p>{resumenEstadoPago(sim)}.</p>
                 )}
               </div>
             )}

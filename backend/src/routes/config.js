@@ -22,7 +22,7 @@ const DEFAULTS = {
   mensaje_template:
     'Hola {nombre}, le recordamos su pago pendiente de S/ {deuda}, correspondiente a {rango_meses}. Gracias.',
   mensaje_aldia:
-    'Hola {nombre}, le recordamos que su proximo vencimiento es {cubierto}. Gracias.',
+    'Hola {nombre}, le recordamos que su proximo pago es {cubierto}. Gracias.',
 };
 
 // gemini-2.5-flash-lite: rapido (~1s) y estable en free tier. flash-latest se

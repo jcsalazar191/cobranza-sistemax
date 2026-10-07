@@ -6,7 +6,7 @@ import {
 } from '../lib/ui.js';
 
 const EJ_DEUDA = { nombre: 'Bodega Don Jose', deuda: 100, meses_debe: 2, monto: 50, periodo: 'TRIMESTRAL', pagado_hasta: '2026-04-01', pagado_hasta_label: 'abril 2026' };
-const EJ_ALDIA = { nombre: 'Farmacia La Salud', deuda: 0, meses_debe: 0, monto: 80, periodo: 'SEMESTRAL', pagado_hasta_label: 'diciembre 2026' };
+const EJ_ALDIA = { nombre: 'Farmacia La Salud', deuda: 0, meses_debe: 0, monto: 80, periodo: 'SEMESTRAL', fecha_vencimiento_label: '1 de enero de 2027', pagado_hasta_label: 'diciembre 2026' };
 
 function Editor({ titulo, ayuda, valor, setValor, placeholders, ejemplo }) {
   return (
