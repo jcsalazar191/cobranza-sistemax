@@ -150,8 +150,21 @@ export function avanzarCobertura(coberturaBase, dineroTotal, tarifas, fallbackMo
   let av = 0;
   for (let i = 0; i < 1200; i += 1) { // tope 100 anios: evita bucle infinito
     const primerMesSinCobertura = sumarMeses(mes, 1);
-    const { monto, periodo } = rateEnMes(primerMesSinCobertura, tarifas, fallbackMonto, fallbackPeriodo);
-    const { meses, costo } = bloquePlan(periodo, monto);
+    const { monto } = rateEnMes(primerMesSinCobertura, tarifas, fallbackMonto, fallbackPeriodo);
+    // El periodo habitual del cliente no debe anular la elección hecha al pagar:
+    // 5 cuotas mensuales cubren 6 meses y 10 cubren 12, para cualquier plan.
+    // Entre bloques promocionales se permiten pagos mensuales normales.
+    const costoSemestral = Number((monto * 5).toFixed(2));
+    const costoAnual = Number((monto * 10).toFixed(2));
+    let meses = 1;
+    let costo = Number(monto.toFixed(2));
+    if (costoAnual > 0 && rem >= costoAnual) {
+      meses = 12;
+      costo = costoAnual;
+    } else if (costoSemestral > 0 && rem >= costoSemestral) {
+      meses = 6;
+      costo = costoSemestral;
+    }
     if (costo <= 0 || rem < costo) break; // tarifa 0 o no alcanza otro bloque
     rem -= costo;
     mes = sumarMeses(mes, meses);
@@ -175,6 +188,19 @@ function deudaPorFechas(pagadoHasta, debe, tarifas, fallbackMonto, fallbackPerio
       mesesAPagar += plan.meses;
       mes = sumarMeses(mes, plan.meses);
       restantes -= plan.meses;
+    } else if (restantes >= 10) {
+      // También se aplica el descuento cuando el cliente paga bloques desde un
+      // plan mensual/trimestral: 10 cuotas cubren 12 meses.
+      bruta += 10 * monto;
+      mesesAPagar += 12;
+      mes = sumarMeses(mes, 12);
+      restantes -= 12;
+    } else if (restantes >= 5) {
+      // Cinco cuotas cubren seis meses; el sexto queda bonificado.
+      bruta += 5 * monto;
+      mesesAPagar += 6;
+      mes = sumarMeses(mes, 6);
+      restantes -= 6;
     } else {
       bruta += monto;
       mesesAPagar += 1;
