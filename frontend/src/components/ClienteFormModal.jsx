@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Modal from './Modal.jsx';
-import { soles, aMonthInput, PERIODOS, periodoMeta, linkRecibo } from '../lib/ui.js';
+import { api } from '../api.js';
+import { soles, aMonthInput, PERIODOS, periodoMeta, linkRecibo, rangoMeses } from '../lib/ui.js';
 import { IconTrash, IconWhatsapp } from './Icons.jsx';
 
 function mesActual() {
@@ -47,7 +48,9 @@ export default function ClienteFormModal({ cliente, diaCobroDefault, onClose, on
   });
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
-  const [tarifaDesde, setTarifaDesde] = useState(mesActual());
+  // null = automatico: primer mes sin cobertura (el mes siguiente a "Pagado hasta").
+  const [desdeManual, setDesdeManual] = useState(null);
+  const [sim, setSim] = useState(null); // vista previa del cambio de plan (simulacion en el servidor)
   // Alta: normalmente el cliente ya pago al registrarse -> registra un pago real.
   const [yaPago, setYaPago] = useState(true);
   const [pagoMonto, setPagoMonto] = useState('');
@@ -61,6 +64,29 @@ export default function ClienteFormModal({ cliente, diaCobroDefault, onClose, on
   // Cambio de cuota al editar: dispara el flujo de tarifa con fecha de vigencia.
   const cambioTarifa = editando && form.monto !== ''
     && (Number(form.monto) !== Number(cliente.monto) || form.periodo !== cliente.periodo);
+
+  const tarifaDesde = desdeManual ?? shiftMes(form.pagado_hasta || mesActual(), 1);
+
+  // Vista previa: simula el guardado en el servidor (sin escribir) al cambiar plan/monto/desde.
+  useEffect(() => {
+    if (!cambioTarifa || !/^[0-9]{9}$/.test(String(form.whatsapp)) || !form.pagado_hasta) { setSim(null); return undefined; }
+    let vivo = true;
+    const t = setTimeout(() => {
+      api.simularCliente(cliente.id, {
+        nombre: form.nombre.trim() || cliente.nombre,
+        whatsapp: String(form.whatsapp).trim(),
+        monto: Number(form.monto),
+        dia_cobro: Number(form.dia_cobro),
+        pagado_hasta: `${form.pagado_hasta}-01`,
+        activo: Boolean(form.activo),
+        periodo: form.periodo,
+        notas: form.notas.trim() || null,
+        cobro_vencido: Boolean(form.cobro_vencido),
+        tarifa_desde: `${tarifaDesde}-01`,
+      }).then((r) => { if (vivo) setSim(r); }).catch(() => { if (vivo) setSim(null); });
+    }, 350);
+    return () => { vivo = false; clearTimeout(t); };
+  }, [cambioTarifa, form, tarifaDesde, cliente]);
 
   async function submit(e) {
     e.preventDefault();
@@ -219,18 +245,32 @@ export default function ClienteFormModal({ cliente, diaCobroDefault, onClose, on
             </label>
             <input
               id="tarifa_desde" type="month" value={tarifaDesde}
-              onChange={(e) => setTarifaDesde(e.target.value)}
+              onChange={(e) => setDesdeManual(e.target.value || null)}
               className={`${inputCls} tabular`}
             />
             <p className="mt-1 text-xs text-amber-200/70">
+              {desdeManual ? 'Elegido a mano. ' : 'Automático: primer mes sin cubrir. '}
               Los meses anteriores se cobran a la tarifa vieja (S/ {cliente.monto}); desde este mes, S/ {form.monto}.
             </p>
+            {sim && (
+              <div className="mt-3 rounded-lg bg-slate-900/60 border border-amber-500/30 px-3 py-2 text-sm text-amber-100" aria-live="polite">
+                <p className="text-xs uppercase tracking-wide text-amber-300/80">Así quedaría</p>
+                {sim.deuda > 0 ? (
+                  <p>
+                    Debe <b className="tabular">{soles(sim.deuda)}</b>
+                    {sim.meses_a_pagar > 0 && <> por {rangoMeses(sim.pagado_hasta, sim.meses_a_pagar)}</>}
+                  </p>
+                ) : (
+                  <p>Sin deuda. Cubierto hasta el {sim.pagado_hasta_label}.</p>
+                )}
+              </div>
+            )}
           </div>
         )}
 
         {(editando || !yaPago) && (
         <div>
-          <label htmlFor="pagado_hasta" className={labelCls}>Pagado hasta</label>
+          <label htmlFor="pagado_hasta" className={labelCls}>Último mes pagado</label>
           <div className="flex items-stretch gap-2">
             <button
               type="button"
@@ -253,6 +293,9 @@ export default function ClienteFormModal({ cliente, diaCobroDefault, onClose, on
             </button>
           </div>
           <p className="mt-1 text-xs text-slate-500">
+            {form.pagado_hasta && (
+              <>Próximo cobro: <span className="text-slate-300">{Number(form.dia_cobro) || 1} de {mesLabel(shiftMes(form.pagado_hasta, 1))}</span> (así se ve en la tarjeta). </>
+            )}
             Los botones avanzan de a {paso} mes(es), segun el plan ({periodoMeta(form.periodo).label}).
           </p>
         </div>
@@ -284,7 +327,7 @@ export default function ClienteFormModal({ cliente, diaCobroDefault, onClose, on
           </div>
           <p className="mt-1 text-xs text-slate-500">
             {editando
-              ? 'Cambiar el plan solo cambia la etiqueta. Para mover "Pagado hasta" usa − / + o registra un pago.'
+              ? 'Si cambias plan o monto se crea una tarifa nueva (ver recuadro amarillo). No mueve "Último mes pagado": usa − / + o registra un pago.'
               : 'Al elegir un plan, "Pagado hasta" se adelanta esos meses (Semestral = +6).'}
           </p>
         </div>

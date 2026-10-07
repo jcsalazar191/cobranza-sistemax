@@ -156,7 +156,9 @@ clientesRouter.put('/:id', async (req, res, next) => {
     const total = Number(sumRows[0].t);
 
     const cambioTarifa = Number(prev.monto) !== Number(c.monto) || prev.periodo !== c.periodo;
-    const desde = tarifaDesde || aISODia1(new Date()); // mes actual por defecto
+    // Por defecto rige desde el primer mes SIN cobertura (pagado_hasta + 1): con atraso
+    // el anual/semestral cubre los meses impagos; con cobertura adelantada espera a que termine.
+    const desde = tarifaDesde || aISODia1(sumarMeses(c.pagado_hasta, 1));
 
     // Historial de tarifas vigente (incluida la nueva si cambia la cuota).
     const { rows: tRows } = await client.query(
@@ -185,7 +187,8 @@ clientesRouter.put('/:id', async (req, res, next) => {
        WHERE id=$12 RETURNING *`,
       [c.nombre, c.whatsapp, c.monto, c.dia_cobro, pagado_hasta, cobertura_base, saldo, c.activo, c.periodo, c.notas, c.cobro_vencido, req.params.id],
     );
-    await client.query('COMMIT');
+    // ?dry=1 = simulacion: devuelve el resultado (deuda, cobertura) sin guardar nada.
+    await client.query(req.query.dry ? 'ROLLBACK' : 'COMMIT');
     res.json(enriquecerCliente({ ...rows[0], tarifas }));
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});

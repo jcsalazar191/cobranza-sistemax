@@ -29,6 +29,7 @@ export const api = {
   obtenerCliente: (id) => request(`/clientes/${id}`),
   crearCliente: (data) => request('/clientes', { method: 'POST', body: JSON.stringify(data) }),
   editarCliente: (id, data) => request(`/clientes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  simularCliente: (id, data) => request(`/clientes/${id}?dry=1`, { method: 'PUT', body: JSON.stringify(data) }),
   eliminarCliente: (id) => request(`/clientes/${id}`, { method: 'DELETE' }),
   registrarPago: (data) => request('/pagos', { method: 'POST', body: JSON.stringify(data) }),
   eliminarPago: (id) => request(`/pagos/${id}`, { method: 'DELETE' }),
