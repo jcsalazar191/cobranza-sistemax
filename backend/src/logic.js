@@ -140,15 +140,17 @@ export function rateEnMes(mes, tarifas, fallbackMonto, fallbackPeriodo = 'MENSUA
   return { monto: Number(elegida.monto) || 0, periodo: elegida.periodo || 'MENSUAL' };
 }
 
-// Avanza la cobertura desde coberturaBase consumiendo el dinero total, cobrando cada
-// bloque a la tarifa vigente del mes en que empieza. Devuelve pagado_hasta y saldo.
+// Avanza la cobertura desde el ultimo mes ya cubierto, consumiendo el dinero total.
+// Cada bloque usa la tarifa vigente en su primer mes SIN cobertura (base + 1).
+// Devuelve pagado_hasta y saldo.
 // Deterministico (registrar/anular pagos recalcula desde cero sin descuadre).
 export function avanzarCobertura(coberturaBase, dineroTotal, tarifas, fallbackMonto, fallbackPeriodo = 'MENSUAL') {
   let rem = Number(dineroTotal) || 0;
   let mes = aPrimerDiaMes(coberturaBase);
   let av = 0;
   for (let i = 0; i < 1200; i += 1) { // tope 100 anios: evita bucle infinito
-    const { monto, periodo } = rateEnMes(mes, tarifas, fallbackMonto, fallbackPeriodo);
+    const primerMesSinCobertura = sumarMeses(mes, 1);
+    const { monto, periodo } = rateEnMes(primerMesSinCobertura, tarifas, fallbackMonto, fallbackPeriodo);
     const { meses, costo } = bloquePlan(periodo, monto);
     if (costo <= 0 || rem < costo) break; // tarifa 0 o no alcanza otro bloque
     rem -= costo;
