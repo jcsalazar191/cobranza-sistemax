@@ -1,6 +1,29 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { avanzarCobertura } from '../src/logic.js';
+import { avanzarCobertura, enriquecerCliente } from '../src/logic.js';
+
+test('exposes the overdue date for a monthly client before the next cycle is due', () => {
+  const cliente = enriquecerCliente({
+    pagado_hasta: '2026-08-01', cobertura_base: '2026-07-01', saldo: 0,
+    monto: 69, periodo: 'MENSUAL', dia_cobro: 22, cobro_vencido: false,
+  }, new Date('2026-10-07T12:00:00'));
+
+  assert.equal(cliente.deuda, 69);
+  assert.equal(cliente.fecha_vencimiento, '2026-09-22');
+  assert.equal(cliente.fecha_vencimiento_label, '22 de septiembre de 2026');
+  assert.equal(cliente.pagado_hasta_label, '22 de septiembre 2026');
+});
+
+test('shows the next due date after the September cycle is paid', () => {
+  const cliente = enriquecerCliente({
+    pagado_hasta: '2026-09-01', cobertura_base: '2026-07-01', saldo: 0,
+    monto: 69, periodo: 'MENSUAL', dia_cobro: 22, cobro_vencido: false,
+  }, new Date('2026-10-07T12:00:00'));
+
+  assert.equal(cliente.deuda, 0);
+  assert.equal(cliente.fecha_vencimiento, '2026-10-22');
+  assert.equal(cliente.fecha_vencimiento_label, '22 de octubre de 2026');
+});
 
 test('prices a payment at the first uncovered month when the tariff changes', () => {
   const tarifas = [

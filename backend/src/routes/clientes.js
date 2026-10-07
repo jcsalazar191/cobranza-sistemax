@@ -19,12 +19,13 @@ clientesRouter.param('id', (req, res, next, val) => {
 });
 
 // GET /api/clientes  -> lista enriquecida, ordenada por deuda desc.
-// Incluye ultimo_recordatorio (fecha del ultimo aviso por WhatsApp).
+// Incluye el ultimo recordatorio y la fecha del ultimo pago registrado.
 clientesRouter.get('/', async (req, res, next) => {
   try {
     const { rows } = await query(
       `SELECT c.*,
-              (SELECT MAX(r.fecha) FROM recordatorios r WHERE r.cliente_id = c.id) AS ultimo_recordatorio
+              (SELECT MAX(r.fecha) FROM recordatorios r WHERE r.cliente_id = c.id) AS ultimo_recordatorio,
+              (SELECT MAX(p.fecha) FROM pagos p WHERE p.cliente_id = c.id) AS ultimo_pago_fecha
        FROM clientes c
        ORDER BY c.nombre`,
     );

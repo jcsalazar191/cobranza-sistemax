@@ -34,7 +34,15 @@ export function aMonthInput(iso) {
 export const PLANTILLA_DEFAULT =
   'Hola {nombre}, le recordamos su pago pendiente de S/ {deuda}, correspondiente a {rango_meses}. Gracias.';
 export const PLANTILLA_ALDIA_DEFAULT =
-  'Hola {nombre}, su servicio esta cubierto hasta {cubierto}. Le recordamos su proxima renovacion. Gracias.';
+  'Hola {nombre}, le recordamos que su proximo vencimiento es {cubierto}. Gracias.';
+
+// Formatea fechas YYYY-MM-DD sin conversion UTC para evitar cambios de dia en moviles.
+export function fechaLegible(iso) {
+  if (!iso) return '';
+  const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number);
+  if (!y || !m || !d) return '';
+  return `${d} de ${MESES_LARGOS[m - 1]} de ${y}`;
+}
 
 // Lista legible de los meses que el cliente debe, a partir de pagado_hasta + meses_debe.
 // Ej: "marzo, abril y mayo de 2026" (o con año por mes si cruza de año).
@@ -82,7 +90,7 @@ export function aplicarPlantilla(template, cliente) {
     .replaceAll('{rango_meses}', rangoMeses(cliente.pagado_hasta, cliente.meses_a_pagar ?? cliente.meses_debe))
     .replaceAll('{monto}', montoFmt)
     .replaceAll('{periodo}', periodoMeta(cliente.periodo).corto)
-    .replaceAll('{cubierto}', cliente.pagado_hasta_label ?? '');
+    .replaceAll('{cubierto}', cliente.fecha_vencimiento_label ?? cliente.pagado_hasta_label ?? '');
 }
 
 // Link de WhatsApp. Elige automaticamente la plantilla:
@@ -102,9 +110,9 @@ export function linkRecibo(cliente, pago) {
   if (!/^\d{9}$/.test(String(cliente?.whatsapp ?? ''))) return null;
   const monto = fmt.format(Number(pago?.monto_total ?? pago?.monto ?? 0) || 0);
   const fecha = String(pago?.fecha ?? '').slice(0, 10);
-  const cubierto = cliente?.pagado_hasta_label ?? '';
+  const vencimiento = cliente?.fecha_vencimiento_label ?? cliente?.pagado_hasta_label ?? '';
   const msg = `Hola ${cliente.nombre ?? ''}, confirmamos su pago de S/ ${monto}${fecha ? ` recibido el ${fecha}` : ''}.`
-    + (cubierto ? ` Su servicio esta cubierto hasta ${cubierto}.` : '')
+    + (vencimiento ? ` Su proximo vencimiento es ${vencimiento}.` : '')
     + ' Gracias por su pago!';
   return `https://wa.me/51${cliente.whatsapp}?text=${encodeURIComponent(msg)}`;
 }

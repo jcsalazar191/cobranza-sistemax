@@ -200,6 +200,11 @@ export function enriquecerCliente(c, hoy = new Date()) {
   // Modelo "saldo a favor": los pagos parciales bajan la deuda S/ por S/.
   const saldo = Number(c.saldo) || 0;
   const deuda = Number(Math.max(0, deudaBruta - saldo).toFixed(2));
+  const diaCobro = Number(c.dia_cobro) || 1;
+  const mesVencimiento = sumarMeses(c.pagado_hasta, 1);
+  const ultimoDiaDelMes = new Date(mesVencimiento.getFullYear(), mesVencimiento.getMonth() + 1, 0).getDate();
+  const diaVencimiento = Math.min(diaCobro, ultimoDiaDelMes);
+  const fechaVencimiento = `${aISODia1(mesVencimiento).slice(0, 7)}-${String(diaVencimiento).padStart(2, '0')}`;
 
   return {
     ...c,
@@ -211,8 +216,9 @@ export function enriquecerCliente(c, hoy = new Date()) {
     deuda,                      // deuda neta (lo que realmente falta pagar)
     estado: estado(debe),
     meses_cobertura: mesesCobertura(c.pagado_hasta, hoy),
-    // Cubierto HASTA su proximo cobro = dia de cobro del mes siguiente al ultimo
-    // mes cubierto. Ej: pago el mes de agosto, dia_cobro 19 -> "19 de septiembre".
-    pagado_hasta_label: `${Number(c.dia_cobro) || 1} de ${etiquetaMes(sumarMeses(c.pagado_hasta, 1))}`,
+    fecha_vencimiento: fechaVencimiento,
+    fecha_vencimiento_label: `${diaVencimiento} de ${MESES[mesVencimiento.getMonth()]} de ${mesVencimiento.getFullYear()}`,
+    // Alias legado: representa la fecha de vencimiento, no el ultimo dia cubierto.
+    pagado_hasta_label: `${diaVencimiento} de ${etiquetaMes(mesVencimiento)}`,
   };
 }

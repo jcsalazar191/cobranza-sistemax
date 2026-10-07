@@ -1,4 +1,4 @@
-import { soles, estadoMeta, linkRecordatorio, periodoMeta, haceDias } from '../lib/ui.js';
+import { soles, estadoMeta, linkRecordatorio, periodoMeta, haceDias, fechaLegible } from '../lib/ui.js';
 import { IconWhatsapp, IconCheck, IconClock } from './Icons.jsx';
 
 export default function ClienteCard({ cliente, onAbrir, onPago, onRecordar, plantillaDeuda, plantillaAldia }) {
@@ -67,9 +67,15 @@ export default function ClienteCard({ cliente, onAbrir, onPago, onRecordar, plan
 
       <p className="mt-2 text-xs text-slate-500 flex items-center justify-between gap-2">
         <span>
-          Pagado hasta <span className="text-slate-300">{cliente.pagado_hasta_label}</span>
+          {cliente.ultimo_pago_fecha && (
+            <span className="block">Último pago: <span className="text-slate-300">{fechaLegible(cliente.ultimo_pago_fecha)}</span></span>
+          )}
+          <span className={Number(cliente.deuda) > 0 ? 'text-amber-300' : 'text-slate-400'}>
+            {Number(cliente.deuda) > 0 ? 'Vencido desde' : 'Próximo vencimiento'}{' '}
+            <span className="text-slate-200">{fechaLegible(cliente.fecha_vencimiento) || cliente.fecha_vencimiento_label || cliente.pagado_hasta_label}</span>
+          </span>
           {cliente.meses_cobertura > 0 && (
-            <span className="text-slate-600"> · +{cliente.meses_cobertura} mes(es)</span>
+            <span className="block text-slate-600">{cliente.meses_cobertura} meses de cobertura por delante</span>
           )}
           {Number(cliente.saldo) > 0 && (
             <span className="text-emerald-400/80"> · a cuenta {soles(cliente.saldo)}</span>
