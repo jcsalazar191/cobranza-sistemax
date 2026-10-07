@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { pool } from '../db.js';
-import { enriquecerCliente, avanzarCobertura } from '../logic.js';
+import { enriquecerCliente, recalcularCoberturaPagos, inferirMesesPago } from '../logic.js';
 import { reqInt, reqEnum, optStr, reqNum, reqFecha } from '../validate.js';
 
 export const pagosRouter = Router();
@@ -11,10 +11,9 @@ pagosRouter.param('id', (req, res, next, val) => {
 });
 
 // POST /api/pagos
-// body: { cliente_id, monto_total, medio, comprobante?, fecha? }
-// Modelo "saldo a favor": el dinero pagado se acumula y la cobertura
-// (pagado_hasta) avanza por bloques completos del plan; el resto baja la deuda
-// como saldo. La cobertura se RECALCULA desde cobertura_base + total pagado.
+// body: { cliente_id, monto_total, meses, medio, comprobante?, fecha? }
+// `meses` es la cobertura elegida al registrar el pago y queda como fuente de
+// verdad. El saldo solo refleja dinero sobrante/abonos; no recalcula meses viejos.
 pagosRouter.post('/', async (req, res, next) => {
   const client = await pool.connect();
   try {
@@ -25,6 +24,9 @@ pagosRouter.post('/', async (req, res, next) => {
       ? reqFecha(req.body, 'fecha')
       : null;
     const monto_total = reqNum(req.body, 'monto_total', { min: 0.01, max: 1e7 });
+    const mesesSolicitados = req.body.meses === undefined
+      ? null
+      : reqInt(req.body, 'meses', { min: 0, max: 120 });
 
     await client.query('BEGIN');
 
@@ -37,19 +39,14 @@ pagosRouter.post('/', async (req, res, next) => {
     const monto = Number(cli.monto);
     const base = cli.cobertura_base || cli.pagado_hasta;
 
-    const { rows: sumRows } = await client.query(
-      'SELECT COALESCE(SUM(monto_total), 0)::float AS t FROM pagos WHERE cliente_id = $1', [cliente_id],
-    );
-    const oldTotal = Number(sumRows[0].t);
-    const newTotal = Number((oldTotal + monto_total).toFixed(2));
-    // Historial de tarifas: cada mes de cobertura se cobra a su tarifa vigente.
     const { rows: tarifas } = await client.query(
       "SELECT monto, periodo, to_char(desde, 'YYYY-MM-DD') AS desde FROM tarifas WHERE cliente_id = $1 ORDER BY desde, id", [cliente_id],
     );
-    // Meses que avanza ESTE pago (para el historial): diferencia de cobertura.
-    const oldAdv = avanzarCobertura(base, oldTotal, tarifas, monto, cli.periodo).mesesAvance;
-    const newAdv = avanzarCobertura(base, newTotal, tarifas, monto, cli.periodo).mesesAvance;
-    const pagoMeses = newAdv - oldAdv;
+    const { rows: pagosPrevios } = await client.query(
+      'SELECT meses, monto_total FROM pagos WHERE cliente_id = $1 ORDER BY id', [cliente_id],
+    );
+    const coberturaActual = recalcularCoberturaPagos(base, pagosPrevios, tarifas, monto, cli.periodo).pagado_hasta;
+    const pagoMeses = mesesSolicitados ?? inferirMesesPago(coberturaActual, monto_total, tarifas, monto, cli.periodo);
 
     const { rows: pagoRows } = await client.query(
       `INSERT INTO pagos (cliente_id, fecha, meses, monto_total, medio, comprobante)
@@ -57,7 +54,10 @@ pagosRouter.post('/', async (req, res, next) => {
       [cliente_id, fecha, pagoMeses, monto_total, medio, comprobante],
     );
 
-    const { pagado_hasta, saldo } = avanzarCobertura(base, newTotal, tarifas, monto, cli.periodo);
+    const { rows: pagos } = await client.query(
+      'SELECT meses, monto_total FROM pagos WHERE cliente_id = $1 ORDER BY id', [cliente_id],
+    );
+    const { pagado_hasta, saldo } = recalcularCoberturaPagos(base, pagos, tarifas, monto, cli.periodo);
     const { rows: cliRows } = await client.query(
       'UPDATE clientes SET pagado_hasta = $1, saldo = $2, cobertura_base = $3 WHERE id = $4 RETURNING *',
       [pagado_hasta, saldo, base, cliente_id],
@@ -93,13 +93,13 @@ pagosRouter.delete('/:id', async (req, res, next) => {
     if (cliRows.length > 0) {
       const cli = cliRows[0];
       const base = cli.cobertura_base || cli.pagado_hasta;
-      const { rows: sumRows } = await client.query(
-        'SELECT COALESCE(SUM(monto_total), 0)::float AS t FROM pagos WHERE cliente_id = $1', [pago.cliente_id],
-      );
       const { rows: tarifas } = await client.query(
         "SELECT monto, periodo, to_char(desde, 'YYYY-MM-DD') AS desde FROM tarifas WHERE cliente_id = $1 ORDER BY desde, id", [pago.cliente_id],
       );
-      const { pagado_hasta, saldo } = avanzarCobertura(base, Number(sumRows[0].t), tarifas, Number(cli.monto), cli.periodo);
+      const { rows: pagos } = await client.query(
+        'SELECT meses, monto_total FROM pagos WHERE cliente_id = $1 ORDER BY id', [pago.cliente_id],
+      );
+      const { pagado_hasta, saldo } = recalcularCoberturaPagos(base, pagos, tarifas, Number(cli.monto), cli.periodo);
       await client.query('UPDATE clientes SET pagado_hasta = $1, saldo = $2, cobertura_base = $3 WHERE id = $4', [pagado_hasta, saldo, base, pago.cliente_id]);
     }
 

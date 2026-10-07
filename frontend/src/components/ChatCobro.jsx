@@ -200,12 +200,15 @@ export default function ChatCobro({ clientes, geminiConfigurado, autoGrabar, onC
       pushBot(respuestaTxt || (!d.cliente ? '¿De qué cliente es el pago?' : `¿Cuánto pagó ${d.cliente.nombre}?`));
       return;
     }
-    // El backend (modelo de saldo) decide cuanta cobertura avanza segun el monto.
+    // Conserva los meses identificados/confirmados para que un recálculo no
+    // vuelva a reinterpretar pagos anteriores según el monto acumulado.
     const nombre = d.cliente.nombre;
     const monto = d.monto;
     try {
       const r = await api.registrarPago({
-        cliente_id: d.cliente.id, medio: d.medio || 'EFECTIVO', fecha: d.fecha || undefined, monto_total: monto,
+        cliente_id: d.cliente.id,
+        ...(Number.isInteger(d.meses) ? { meses: d.meses } : {}),
+        medio: d.medio || 'EFECTIVO', fecha: d.fecha || undefined, monto_total: monto,
       });
       setDraftBoth(VACIO);
       const c = r?.cliente;

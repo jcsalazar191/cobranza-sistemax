@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { query, pool } from '../db.js';
 import {
-  enriquecerCliente, aISODia1, sumarMeses, avanzarCobertura, diffMeses,
+  enriquecerCliente, aISODia1, sumarMeses, recalcularCoberturaPagos, diffMeses,
 } from '../logic.js';
 import { tarifasDe, tarifasMap } from '../tarifas.js';
 import {
@@ -151,10 +151,9 @@ clientesRouter.put('/:id', async (req, res, next) => {
       return res.status(404).json({ error: 'Cliente no encontrado.' });
     }
     const prev = cur[0];
-    const { rows: sumRows } = await client.query(
-      'SELECT COALESCE(SUM(monto_total), 0)::float AS t FROM pagos WHERE cliente_id = $1', [req.params.id],
+    const { rows: pagos } = await client.query(
+      'SELECT meses, monto_total FROM pagos WHERE cliente_id = $1 ORDER BY id', [req.params.id],
     );
-    const total = Number(sumRows[0].t);
 
     const cambioTarifa = Number(prev.monto) !== Number(c.monto) || prev.periodo !== c.periodo;
     // Por defecto rige desde el primer mes SIN cobertura (pagado_hasta + 1): con atraso
@@ -174,7 +173,7 @@ clientesRouter.put('/:id', async (req, res, next) => {
     const delta = diffMeses(prev.pagado_hasta, c.pagado_hasta);
     const cobertura_base = aISODia1(sumarMeses(base0, delta));
 
-    const { pagado_hasta, saldo } = avanzarCobertura(cobertura_base, total, tarifas, c.monto, c.periodo);
+    const { pagado_hasta, saldo } = recalcularCoberturaPagos(cobertura_base, pagos, tarifas, c.monto, c.periodo);
 
     if (cambioTarifa) {
       await client.query(

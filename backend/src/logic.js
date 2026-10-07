@@ -173,6 +173,45 @@ export function avanzarCobertura(coberturaBase, dineroTotal, tarifas, fallbackMo
   return { pagado_hasta: aISODia1(mes), saldo: Number(rem.toFixed(2)), mesesAvance: av };
 }
 
+// Recalcula desde los meses que quedaron registrados en cada pago. El dinero
+// solo determina el saldo a favor; nunca vuelve a reinterpretar meses pasados.
+// El orden por id representa el orden en que se fueron aplicando a cobertura.
+export function recalcularCoberturaPagos(coberturaBase, pagos, tarifas, fallbackMonto, fallbackPeriodo = 'MENSUAL') {
+  let mes = aPrimerDiaMes(coberturaBase);
+  let saldo = 0;
+  let mesesAvance = 0;
+
+  for (const pago of pagos || []) {
+    const meses = Math.max(0, Number(pago.meses) || 0);
+    const monto = Number(pago.monto_total) || 0;
+    if (meses === 0) {
+      saldo = Number((saldo + monto).toFixed(2));
+      continue;
+    }
+
+    const tarifa = rateEnMes(sumarMeses(mes, 1), tarifas, fallbackMonto, fallbackPeriodo);
+    const cuotas = meses === 12 ? 10 : (meses === 6 ? 5 : meses);
+    const costo = Number((cuotas * tarifa.monto).toFixed(2));
+    saldo = Number(Math.max(0, saldo + monto - costo).toFixed(2));
+    mes = sumarMeses(mes, meses);
+    mesesAvance += meses;
+  }
+
+  return { pagado_hasta: aISODia1(mes), saldo, mesesAvance };
+}
+
+// Compatibilidad para integraciones antiguas que no envian `meses`.
+// Solo clasifica el pago nuevo usando su monto y la tarifa del siguiente mes;
+// los pagos historicos se leen siempre desde su columna `meses`.
+export function inferirMesesPago(coberturaBase, montoPago, tarifas, fallbackMonto, fallbackPeriodo = 'MENSUAL') {
+  const tarifa = rateEnMes(sumarMeses(coberturaBase, 1), tarifas, fallbackMonto, fallbackPeriodo).monto;
+  const monto = Number(montoPago) || 0;
+  if (tarifa <= 0 || monto < tarifa) return 0;
+  if (monto >= tarifa * 10) return 12;
+  if (monto >= tarifa * 5) return 6;
+  return Math.floor(monto / tarifa);
+}
+
 // Deuda bruta y meses a pagar recorriendo cada mes vencido a su tarifa vigente.
 // `debe` = meses vencidos (de mesesDebe). Empieza en pagado_hasta + 1.
 function deudaPorFechas(pagadoHasta, debe, tarifas, fallbackMonto, fallbackPeriodo) {

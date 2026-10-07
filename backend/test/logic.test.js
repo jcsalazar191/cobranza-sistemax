@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { avanzarCobertura, enriquecerCliente } from '../src/logic.js';
+import { avanzarCobertura, enriquecerCliente, inferirMesesPago, recalcularCoberturaPagos } from '../src/logic.js';
 
 test('exposes the overdue date for a monthly client before the next cycle is due', () => {
   const cliente = enriquecerCliente({
@@ -116,4 +116,32 @@ test('six- and twelve-month discounts do not depend on the customer usual plan',
     avanzarCobertura('2026-04-01', 550, tarifas, 55, 'ANUAL').mesesAvance,
     12,
   );
+});
+
+test('recalculation preserves months recorded per payment instead of reclassifying old amounts', () => {
+  const tarifas = [{ monto: 55, periodo: 'MENSUAL', desde: '2000-01-01' }];
+  const result = recalcularCoberturaPagos('2026-04-01', [
+    { meses: 5, monto_total: 275 }, // pago anterior: cinco meses, no se convierte retroactivamente en seis
+    { meses: 6, monto_total: 275 }, // el pago posterior sí registra seis meses
+  ], tarifas, 55, 'MENSUAL');
+
+  assert.deepEqual(result, { pagado_hasta: '2027-03-01', saldo: 0, mesesAvance: 11 });
+});
+
+test('recalculation after deleting a payment keeps the remaining payment coverage and abonos', () => {
+  const tarifas = [{ monto: 55, periodo: 'MENSUAL', desde: '2000-01-01' }];
+  assert.deepEqual(
+    recalcularCoberturaPagos('2026-04-01', [
+      { meses: 0, monto_total: 20 },
+      { meses: 6, monto_total: 275 },
+    ], tarifas, 55),
+    { pagado_hasta: '2026-10-01', saldo: 20, mesesAvance: 6 },
+  );
+});
+
+test('legacy callers infer months only for the new payment', () => {
+  const tarifas = [{ monto: 55, periodo: 'MENSUAL', desde: '2000-01-01' }];
+  assert.equal(inferirMesesPago('2026-04-01', 275, tarifas, 55), 6);
+  assert.equal(inferirMesesPago('2026-04-01', 550, tarifas, 55), 12);
+  assert.equal(inferirMesesPago('2026-04-01', 20, tarifas, 55), 0);
 });
