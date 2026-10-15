@@ -88,11 +88,20 @@
         }
       } catch { /* sin etiquetas */ }
 
+      // Chats @lid: si el numero no viene en el contacto, wa-js lo resuelve por el mapeo LID <-> telefono.
+      let telefono = telefonoDeChat(chat);
+      if (!telefono && chat?.id?.server === 'lid' && WPP.contact?.getPnLidEntry) {
+        try {
+          const pn = (await WPP.contact.getPnLidEntry(chat.id._serialized))?.phoneNumber;
+          telefono = String(pn?.id || pn?._serialized || '').replace(/@.*/, '');
+        } catch { /* sin mapeo: queda solo plantillas */ }
+      }
+
       window.postMessage({
         fuente: FUENTE,
         tipo: 'chat',
         chat: {
-          telefono: telefonoDeChat(chat),
+          telefono,
           nombre: chat?.contact?.name || chat?.contact?.pushname || chat?.name || '',
           mensajes,
           etiquetas: (chat.labels || []).map(String),
