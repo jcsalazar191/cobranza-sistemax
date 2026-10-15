@@ -167,8 +167,12 @@ async function obtenerMensajesLead(leadId, lead) {
     [leadId],
   );
 
+  // Un mismo chat puede tener mensajes bajo el LID y bajo el telefono: se leen ambos (hasta 1000 c/u)
+  // y se deduplican abajo por wa_id. Evolution solo guarda lo recibido desde que se conecto la instancia.
   const jid = lead.lid || `${lead.telefono}@s.whatsapp.net`;
-  let registros = await listarMensajes(jid, { limite: 100 }).catch(() => []);
+  const jids = [...new Set([lead.lid, lead.telefono ? `${lead.telefono}@s.whatsapp.net` : null].filter(Boolean))];
+  let registros = [];
+  for (const j of jids) registros.push(...await listarMensajes(j, { limite: 1000 }).catch(() => []));
   if (!registros.length) {
     try {
       const chats = await listarChats();
@@ -215,6 +219,30 @@ leadsRouter.post('/por-clasificar/:id/sugerir', async (req, res, next) => {
     const mensajes = await obtenerMensajesLead(req.params.id, lead);
     const sugerencia = await sugerirRespuesta({ lead, mensajes, memoria: null });
     res.json({ sugerencia });
+  } catch (err) { next(err); }
+});
+
+// POST /api/leads/nombres-guardados { contactos:[{ telefono?, lid?, nombre }] }
+// La EXTENSION manda la agenda real de WhatsApp Web (nombre guardado por el dueño): reemplaza el
+// nombre de perfil que trajo Evolution. Solo toca leads que ya existen; no crea ninguno.
+leadsRouter.post('/nombres-guardados', async (req, res, next) => {
+  try {
+    const lista = (Array.isArray(req.body?.contactos) ? req.body.contactos : []).slice(0, 2000)
+      .map((c) => ({
+        telefono: normalizarTelefono(c?.telefono || ''),
+        lid: /^\d+@lid$/.test(String(c?.lid || '')) ? String(c.lid) : '',
+        nombre: String(c?.nombre || '').trim().slice(0, 120),
+      }))
+      .filter((c) => c.nombre && (c.telefono || c.lid));
+    if (!lista.length) return res.json({ recibidos: 0, actualizados: 0 });
+    const r = await query(
+      `UPDATE leads l SET nombre = v.nombre
+       FROM unnest($1::text[], $2::text[], $3::text[]) AS v(telefono, lid, nombre)
+       WHERE ((v.telefono <> '' AND l.telefono = v.telefono) OR (v.lid <> '' AND l.lid = v.lid))
+         AND l.nombre IS DISTINCT FROM v.nombre`,
+      [lista.map((c) => c.telefono), lista.map((c) => c.lid), lista.map((c) => c.nombre)],
+    );
+    res.json({ recibidos: lista.length, actualizados: r.rowCount });
   } catch (err) { next(err); }
 });
 

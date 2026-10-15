@@ -56,10 +56,12 @@
       <header>
         <strong>Copiloto</strong>
         <span id="cop-head-botones">
+          <button id="cop-nombres" type="button" title="Trae los nombres que tienes guardados en tu agenda">👥 Nombres</button>
           <button id="cop-tablero" type="button" title="Abrir tablero">📋 Tablero</button>
           <button id="cop-cerrar" type="button" title="Cerrar">✕</button>
         </span>
       </header>
+      <p id="cop-sync-msg" class="cop-nota" hidden></p>
       <div id="cop-login" hidden>
         <p class="cop-nota">Inicia sesion en cobranza para usar el copiloto.</p>
         <input id="cop-email" type="email" placeholder="Correo" autocomplete="username">
@@ -124,6 +126,24 @@
   $('cop-cerrar').addEventListener('click', () => { panel.hidden = true; });
   $('cop-tablero').addEventListener('click', () => window.__copTablero?.toggle());
 
+  // Sincroniza los nombres guardados en la agenda de WhatsApp con la lista de chats del sistema.
+  function avisoSync(t) { const m = $('cop-sync-msg'); m.textContent = t; m.hidden = !t; }
+  $('cop-nombres').addEventListener('click', () => {
+    avisoSync('Leyendo tu agenda…');
+    window.postMessage({ fuente: FUENTE + '-ui', tipo: 'sync-nombres' }, '*');
+  });
+  async function enviarNombres(d) {
+    if (d.error) { avisoSync('No se pudo leer la agenda: ' + d.error); return; }
+    let actualizados = 0;
+    for (let i = 0; i < d.contactos.length; i += 500) {
+      avisoSync(`Enviando ${Math.min(i + 500, d.contactos.length)} de ${d.contactos.length}…`);
+      const r = await api('POST', '/leads/nombres-guardados', { contactos: d.contactos.slice(i, i + 500) });
+      if (!r.ok) { avisoSync(r.data?.error || `Error ${r.status || ''} al enviar.`); return; }
+      actualizados += r.data?.actualizados || 0;
+    }
+    avisoSync(`Listo: ${d.contactos.length} contactos guardados leídos, ${actualizados} nombres actualizados.`);
+  }
+
   // ---------- sesion ----------
   async function arrancar() {
     const r = await api('GET', '/me');
@@ -166,6 +186,7 @@
     const d = ev.data;
     if (ev.source !== window || d?.fuente !== FUENTE) return;
     if (d.tipo === 'chat') { chatActual = d.chat; revisarEnvio(d.chat); refrescarFicha(); }
+    if (d.tipo === 'nombres') { enviarNombres(d); return; }
     if (d.tipo === 'wajs') { wajs = d; if (!chatActual) refrescarFicha(); }
   });
 

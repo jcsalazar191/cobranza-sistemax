@@ -152,6 +152,28 @@
     }
   }
 
+  // Agenda real: solo contactos GUARDADOS por el dueño (name = nombre de su agenda, no el de perfil).
+  async function reportarNombres() {
+    try {
+      if (!listo()) { window.postMessage({ fuente: FUENTE, tipo: 'nombres', error: 'wa-js aun no esta listo.' }, '*'); return; }
+      const lista = await Promise.resolve(WPP.contact.list());
+      const contactos = [];
+      for (const c of lista || []) {
+        const nombre = String(c?.name || '').trim();
+        if (!nombre || !c.isMyContact) continue;
+        const id = c.id || {};
+        if (id.server === 'c.us') contactos.push({ telefono: String(id.user), nombre });
+        else if (id.server === 'lid') {
+          const pn = c.phoneNumber?.user ? String(c.phoneNumber.user) : '';
+          contactos.push({ ...(pn ? { telefono: pn } : {}), lid: id._serialized, nombre });
+        }
+      }
+      window.postMessage({ fuente: FUENTE, tipo: 'nombres', contactos }, '*');
+    } catch (e) {
+      window.postMessage({ fuente: FUENTE, tipo: 'nombres', error: String(e?.message || e) }, '*');
+    }
+  }
+
   // Ordenes desde el content script (panel / tablero).
   window.addEventListener('message', (ev) => {
     const d = ev.data;
@@ -160,6 +182,7 @@
       WPP.chat.openChatBottom(`${d.telefono}@c.us`).catch(() => {});
     }
     if (d.tipo === 'listar-etiquetas') reportarEtiquetas();
+    if (d.tipo === 'sync-nombres') reportarNombres();
     if (d.tipo === 'etiqueta' && d.labelId && listo()) {
       const activo = WPP.chat.getActiveChat();
       const id = activo?.id?._serialized;
