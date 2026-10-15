@@ -181,11 +181,12 @@
     const ficha = $('cop-ficha');
     // El contexto manual es por cliente: se limpia solo al cambiar de chat
     // (no en las actualizaciones del mismo chat, para no borrar lo escrito).
-    if (chatActual?.telefono !== telAnterior) {
-      telAnterior = chatActual?.telefono || null;
+    const claveChat = chatActual?.telefono || chatActual?.lid || null;
+    if (claveChat !== telAnterior) {
+      telAnterior = claveChat;
       $('cop-contexto').value = '';
     }
-    $('cop-sugerir').disabled = !chatActual?.telefono || cargandoIA;
+    $('cop-sugerir').disabled = !claveChat || cargandoIA;
     $('cop-sug-zona').hidden = true;
     $('cop-error').hidden = true;
     $('cop-extra').hidden = true;
@@ -201,7 +202,14 @@
       ficha.querySelector('.cop-nota').textContent = msj;
       return;
     }
-    if (!chatActual.telefono) { ficha.innerHTML = '<p class="cop-nota">Este chat no expone numero (LID). Solo plantillas.</p>'; return; }
+    if (!chatActual.telefono) {
+      ficha.innerHTML = '<p class="cop-nombre"></p><p class="cop-nota"></p>';
+      ficha.querySelector('.cop-nombre').textContent = chatActual.nombre || 'Sin nombre';
+      ficha.querySelector('.cop-nota').textContent = chatActual.lid
+        ? 'Sin numero (WhatsApp lo oculta): la IA sugiere con esta conversacion, pero no hay ficha ni se guarda nada.'
+        : 'Este chat no expone numero. Solo plantillas.';
+      return;
+    }
 
     const r = await api('GET', '/leads/por-telefono/' + encodeURIComponent(chatActual.telefono));
     if (r.status === 401) { arrancar(); return; }
@@ -255,14 +263,14 @@
 
   // ---------- sugerencia IA ----------
   $('cop-sugerir').addEventListener('click', async () => {
-    if (!chatActual?.telefono || cargandoIA) return;
+    if (!(chatActual?.telefono || chatActual?.lid) || cargandoIA) return;
     cargandoIA = true;
     const btn = $('cop-sugerir');
     btn.disabled = true;
     btn.textContent = '⏳ Pensando…';
     $('cop-error').hidden = true;
     const r = await api('POST', '/leads/sugerir-directo', {
-      telefono: chatActual.telefono,
+      ...(chatActual.telefono ? { telefono: chatActual.telefono } : { lid: chatActual.lid }),
       nombre: chatActual.nombre,
       mensajes: chatActual.mensajes,
       contexto: $('cop-contexto').value.trim(),

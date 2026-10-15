@@ -102,6 +102,8 @@
         tipo: 'chat',
         chat: {
           telefono,
+          // Sin numero (usuario @lid): el LID sirve solo para sugerir, nunca como telefono.
+          lid: !telefono && chat?.id?.server === 'lid' ? String(chat.id.user || '') : '',
           nombre: chat?.contact?.name || chat?.contact?.pushname || chat?.name || '',
           mensajes,
           etiquetas: (chat.labels || []).map(String),

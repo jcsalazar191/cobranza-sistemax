@@ -219,7 +219,9 @@ leadsRouter.post('/por-clasificar/:id/sugerir', async (req, res, next) => {
 leadsRouter.post('/sugerir-directo', async (req, res, next) => {
   try {
     const telefono = normalizarTelefono(req.body?.telefono || '');
-    if (!telefono) return res.status(400).json({ error: 'Falta el telefono.' });
+    // Chats sin numero (usuario @lid): se sugiere solo con la conversacion; sin ficha, sin guardar.
+    const sinNumero = !telefono && /^\d{6,25}$/.test(String(req.body?.lid || ''));
+    if (!telefono && !sinNumero) return res.status(400).json({ error: 'Falta el telefono.' });
     const mensajes = (Array.isArray(req.body?.mensajes) ? req.body.mensajes : [])
       .map((m) => ({
         direccion: m?.direccion === 'out' ? 'out' : 'in',
@@ -230,8 +232,8 @@ leadsRouter.post('/sugerir-directo', async (req, res, next) => {
       .slice(-60);
     if (!mensajes.length) return res.status(400).json({ error: 'Faltan los mensajes.' });
 
-    const { rows } = await query('SELECT * FROM leads WHERE telefono = $1', [telefono]);
-    const lead = rows[0] || { telefono, nombre: String(req.body?.nombre || '').trim() || null, notas: null };
+    const { rows } = sinNumero ? { rows: [] } : await query('SELECT * FROM leads WHERE telefono = $1', [telefono]);
+    const lead = rows[0] || { telefono: telefono || null, nombre: String(req.body?.nombre || '').trim() || null, notas: null };
     let memoria = null;
     if (rows[0]?.categoria === 'posible') {
       try { memoria = await memoriaAlDia(rows[0].id); } catch { /* sigue sin ficha */ }
