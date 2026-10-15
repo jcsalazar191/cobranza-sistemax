@@ -120,6 +120,7 @@ leadsRouter.post('/importar-wa', async (req, res, next) => {
 // trae su `categoria` para que el frontend sepa como abrirla: 'posible' abre
 // la ficha completa (copiloto/IA), 'sin_clasificar'/'conocido' abren la vista
 // simple (leer + responder + marcar categoria), sin IA de por medio.
+const PALABRAS_WEB = '(sysfarma|botica|farmacia|demo|sistema|inventario)'; // constante fija (no viene del usuario)
 leadsRouter.get('/todos', async (req, res, next) => {
   try {
     const search = String(req.query.search || '').trim();
@@ -132,13 +133,20 @@ leadsRouter.get('/todos', async (req, res, next) => {
     // "conocido" = el dueño YA lo marco como amigo/cliente actual, decision
     // explicita suya -- a diferencia de "sin_clasificar" (nunca revisado, si
     // se muestra), un "conocido" no se vuelve a mostrar aca.
-    cond.push(`categoria <> 'conocido'`);
+    // ?web=1: solo chats que llegaron por la web (el cliente menciono sysfarma/botica/farmacia/demo/...).
+    // Ahi SI se muestran los "conocido" para poder revisar y reclasificar.
+    const soloWeb = req.query.web === '1';
+    if (soloWeb) {
+      cond.push(`(l.ultimo_mensaje ~* '${PALABRAS_WEB}' OR EXISTS (SELECT 1 FROM lead_mensajes w WHERE w.lead_id = l.id AND w.direccion = 'in' AND w.cuerpo ~* '${PALABRAS_WEB}'))`);
+    } else {
+      cond.push(`categoria <> 'conocido'`);
+    }
     const where = `WHERE ${cond.join(' AND ')}`;
     const { rows } = await query(
       `SELECT l.id, l.telefono, l.nombre, l.foto_url, l.categoria, l.score, l.ultimo_contacto, l.ultimo_mensaje,
               (SELECT m.direccion FROM lead_mensajes m WHERE m.lead_id = l.id ORDER BY m.fecha DESC, m.id DESC LIMIT 1) AS ultima_direccion
        FROM leads l ${where}
-       ORDER BY ultimo_contacto DESC NULLS LAST, id DESC LIMIT 500`,
+       ORDER BY ultimo_contacto DESC NULLS LAST, id DESC LIMIT ${soloWeb ? 1000 : 500}`,
       params,
     );
     res.json(rows);

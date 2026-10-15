@@ -66,7 +66,7 @@ export const api = {
   configRecordatorios: () => request('/leads/config-recordatorios'),
   guardarConfigRecordatorios: (numero) => request('/leads/config-recordatorios', { method: 'PUT', body: JSON.stringify({ numero }) }),
   enviarCotizacion: (id, sucursales = 1) => request(`/leads/${id}/cotizacion`, { method: 'POST', body: JSON.stringify({ sucursales }) }),
-  todosLeads: ({ search = '' } = {}) => request(`/leads/todos?search=${encodeURIComponent(search)}`),
+  todosLeads: ({ search = '', web = false } = {}) => request(`/leads/todos?search=${encodeURIComponent(search)}${web ? '&web=1' : ''}`),
   previewLead: (id) => request(`/leads/por-clasificar/${id}`),
   responderPorClasificar: (id, texto) => request(`/leads/por-clasificar/${id}/responder`, { method: 'POST', body: JSON.stringify({ texto }) }),
   sugerirPorClasificar: (id) => request(`/leads/por-clasificar/${id}/sugerir`, { method: 'POST' }),

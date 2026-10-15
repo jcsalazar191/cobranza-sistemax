@@ -181,8 +181,10 @@ export default function PosiblesView() {
     return true;
   });
   async function cargarTodos() {
-    try { setTodos(await api.todosLeads({ search })); } catch (e) { setError(e.message); }
+    try { setTodos(await api.todosLeads({ search, web: filtroLista === 'web' })); } catch (e) { setError(e.message); }
   }
+  // "De la web" trae otra lista (con los Conocido incluidos): recarga al cambiar el filtro.
+  useEffect(() => { cargarTodos(); }, [filtroLista === 'web']); // eslint-disable-line react-hooks/exhaustive-deps
   async function cargarWa() {
     try { setWa(await api.estadoWa()); } catch { /* ignore */ }
   }
@@ -773,13 +775,22 @@ export default function PosiblesView() {
        </div>
 
        <div className="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Filtrar chats">
-         {[['todos', 'Todos'], ['respondieron', 'Me respondieron'], ['pendientes', 'Falta responder']].map(([valor, label]) => (
+         {[['todos', 'Todos'], ['web', 'De la web'], ['respondieron', 'Me respondieron'], ['pendientes', 'Falta responder']].map(([valor, label]) => (
            <button key={valor} type="button" onClick={() => setFiltroLista(valor)} aria-pressed={filtroLista === valor}
              className={`shrink-0 h-9 px-3 rounded-full border text-xs font-semibold cursor-pointer ${filtroLista === valor ? 'border-emerald-400 bg-emerald-500/15 text-emerald-300' : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200'}`}>
              {label}
            </button>
          ))}
        </div>
+
+       {filtroLista === 'web' && (
+         <p className="text-xs text-slate-400">
+           {todos.length} chats que mencionaron sysfarma, botica, farmacia, demo, sistema o inventario
+           {' · '}<span className="text-amber-300">{todos.filter((l) => l.categoria === 'sin_clasificar').length} sin clasificar</span>
+           {' · '}<span className="text-emerald-300">{todos.filter((l) => l.categoria === 'posible').length} posibles</span>
+           {' · '}{todos.filter((l) => l.categoria === 'conocido').length} conocidos
+         </p>
+       )}
 
        {error && <p className="text-sm text-red-400">{error}</p>}
 
@@ -804,6 +815,18 @@ export default function PosiblesView() {
                   <p className="text-[11px] text-slate-500 mt-0.5 tabular">{l.telefono}</p>
                 </div>
               </button>
+              {filtroLista === 'web' && (
+                <div className="flex items-center gap-2 px-1 pt-1.5" role="group" aria-label={`Clasificar ${l.nombre || l.telefono}`}>
+                  {[['posible', 'Posible', 'border-emerald-500/50 text-emerald-300 bg-emerald-500/10'], ['conocido', 'Conocido', 'border-slate-500/60 text-slate-300 bg-slate-700/30']].map(([cat, label, cls]) => (
+                    <button key={cat} type="button" disabled={clasificando === l.id || l.categoria === cat}
+                      onClick={() => clasificar(l.id, cat)} aria-pressed={l.categoria === cat}
+                      className={`h-9 px-3 rounded-full border text-xs font-semibold cursor-pointer disabled:cursor-default ${l.categoria === cat ? `${cls} ring-1 ring-current` : 'border-slate-700 text-slate-500 hover:text-slate-200'}`}>
+                      {l.categoria === cat ? `✓ ${label}` : label}
+                    </button>
+                  ))}
+                  {l.categoria === 'sin_clasificar' && <span className="text-[11px] text-amber-300">sin clasificar</span>}
+                </div>
+              )}
             </li>
           ))}
         </ul>
