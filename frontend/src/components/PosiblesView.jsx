@@ -4,13 +4,17 @@ import { api } from '../api.js';
 import { IconWhatsapp, IconMoreVertical } from './Icons.jsx';
 
 const ESTADOS = [
-  { v: 'nuevo', label: 'Nuevo', cls: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' },
-  { v: 'contactado', label: 'Contactado', cls: 'bg-amber-500/15 text-amber-300 border-amber-500/30' },
-  { v: 'atendido', label: 'Atendido', cls: 'bg-sky-500/15 text-sky-300 border-sky-500/30' },
-  { v: 'convertido', label: 'Convertido', cls: 'bg-green-500/15 text-green-300 border-green-500/30' },
-  { v: 'descartado', label: 'Descartado', cls: 'bg-slate-600/20 text-slate-400 border-slate-600/40' },
+  { v: 'nuevo', label: 'Nuevo', hint: 'Escribió y aún no le contestas', cls: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' },
+  { v: 'contactado', label: 'En espera', hint: 'Le escribiste y esperas su respuesta', cls: 'bg-amber-500/15 text-amber-300 border-amber-500/30' },
+  { v: 'atendido', label: 'Interesado', hint: 'Respondió y pidió información', cls: 'bg-sky-500/15 text-sky-300 border-sky-500/30' },
+  { v: 'demo', label: 'Demo', hint: 'Demo agendada o hecha', cls: 'bg-violet-500/15 text-violet-300 border-violet-500/30' },
+  { v: 'cotizado', label: 'Cotizado', hint: 'Ya tiene precio', cls: 'bg-teal-500/15 text-teal-300 border-teal-500/30' },
+  { v: 'por_pagar', label: 'Por pagar', hint: 'Aceptó, falta el pago', cls: 'bg-lime-500/15 text-lime-300 border-lime-500/30' },
+  { v: 'convertido', label: 'Cliente', hint: 'Ya pagó', cls: 'bg-green-500/15 text-green-300 border-green-500/30' },
+  { v: 'descartado', label: 'Descartado', hint: 'No le interesa o dejó de responder', cls: 'bg-slate-600/20 text-slate-400 border-slate-600/40' },
 ];
-const ETAPAS_TABLERO = ['por_pagar', 'negociando', 'cotizado', 'demo', 'por_confirmar', 'info_enviada', 'primer_contacto', 'frio'];
+// El tablero usa los mismos estados que el selector del chat: una columna por estado (siempre visibles).
+const ETAPAS_TABLERO = ESTADOS.map((e) => e.v);
 
 // De las notas del analisis IA ("[etapa/temperatura] resumen -> paso") saca un
 // badge con la etapa, para ver de un vistazo en que punto esta cada posible.
@@ -280,6 +284,24 @@ export default function PosiblesView() {
       setError('Resultado guardado para el aprendizaje.');
       setUltimaSugerenciaEnviada(null);
     } catch (e) { setError(e.message); } finally { setGuardandoResultado(false); }
+  }
+
+  // Descartados no vienen en la lista de posibles (se ocultan); el tablero los trae aparte.
+  const [descartados, setDescartados] = useState([]);
+  async function cargarDescartados() {
+    try { setDescartados(await api.listarLeads({ search, estado: 'descartado' })); } catch (e) { setError(e.message); }
+  }
+  useEffect(() => { if (tab === 'tablero') cargarDescartados(); }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Mover una tarjeta del tablero = cambiar su estado.
+  async function moverEstado(lead, v) {
+    if (v === lead.estado) return;
+    try {
+      await api.actualizarLead(lead.id, { estado: v });
+      const mov = { ...lead, estado: v };
+      setLeads((ls) => (v === 'descartado' ? ls.filter((l) => l.id !== lead.id) : ls.map((l) => (l.id === lead.id ? mov : l))));
+      setDescartados((ds) => (v === 'descartado' ? [mov, ...ds] : ds.filter((l) => l.id !== lead.id)));
+      if (lead.estado === 'descartado' && v !== 'descartado') setLeads((ls) => (ls.some((l) => l.id === lead.id) ? ls : [mov, ...ls]));
+    } catch (e) { setError(e.message); }
   }
 
   async function cambiarEstado(v) {
@@ -553,7 +575,7 @@ export default function PosiblesView() {
         )
       )}
 
-      {/* ---- TABLERO: leads agrupados por etapa ---- */}
+      {/* ---- TABLERO: una columna por ESTADO; mover la tarjeta = cambiar su estado ---- */}
       {tab === 'tablero' && (
         <div className="space-y-3">
           <div className="flex items-center gap-2 overflow-x-auto pb-1">
@@ -563,7 +585,7 @@ export default function PosiblesView() {
               return (
                 <button key={et} type="button" onClick={() => setEtapasVisibles((actual) => activo ? actual.filter((x) => x !== et) : [...actual, et])}
                   aria-pressed={activo} className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer ${activo ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-300' : 'border-slate-700 bg-slate-900 text-slate-500'}`}>
-                  {ETAPAS[et]?.label || et}
+                  {estadoInfo(et).label}
                 </button>
               );
             })}
@@ -583,19 +605,20 @@ export default function PosiblesView() {
           </div>
           <div className="flex flex-nowrap gap-4 overflow-x-auto pb-2 snap-x">
           {ETAPAS_TABLERO.filter((et) => etapasVisibles.includes(et)).map((et) => {
-            const col = leads.filter((l) => analisis(l.notas)?.raw === et)
+            const col = (et === 'descartado' ? descartados : leads.filter((l) => l.estado === et))
               .sort((a, b) => {
                 const ta = new Date(a.ultimo_contacto || 0).getTime() || 0;
                 const tb = new Date(b.ultimo_contacto || 0).getTime() || 0;
                 return ordenTablero === 'antiguos' ? ta - tb : tb - ta;
               });
-            if (!col.length) return null;
             return (
               <div key={et} className="shrink-0 w-[min(82vw,280px)] snap-start">
-                <div className="flex items-center justify-between mb-2 px-1">
-                  <span className="text-xs font-semibold text-slate-300">{ETAPAS[et]?.label || et}</span>
+                <div className="flex items-center justify-between mb-2 px-1" title={estadoInfo(et).hint}>
+                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${estadoInfo(et).cls}`}>{estadoInfo(et).label}</span>
                   <span className="text-xs text-slate-500">{col.length}</span>
                 </div>
+                <p className="px-1 mb-2 text-[10px] text-slate-600">{estadoInfo(et).hint}</p>
+                {col.length === 0 && <p className="rounded-lg border border-dashed border-slate-800 px-3 py-4 text-center text-[11px] text-slate-600">Vacío</p>}
                 <ul className="space-y-2">
                   {col.map((l) => (
                     <li key={l.id}>
@@ -612,6 +635,13 @@ export default function PosiblesView() {
                         {l.ultimo_mensaje && <p className="text-[11px] text-slate-500 truncate mt-0.5">{l.ultimo_mensaje}</p>}
                         <p className="text-[10px] text-slate-600 mt-1">{fmt(l.ultimo_contacto)}</p>
                       </button>
+                      <label className="mt-1 flex items-center gap-2 px-1 text-[10px] text-slate-500">
+                        Mover a
+                        <select value={l.estado} onChange={(e) => moverEstado(l, e.target.value)} aria-label={`Mover ${l.nombre || l.telefono} a otro estado`}
+                          className="h-8 flex-1 rounded-md border border-slate-700 bg-slate-900 px-1.5 text-[11px] text-slate-300 cursor-pointer">
+                          {ESTADOS.map((e) => <option key={e.v} value={e.v}>{e.label}</option>)}
+                        </select>
+                      </label>
                     </li>
                   ))}
                 </ul>
@@ -857,8 +887,7 @@ export default function PosiblesView() {
                         {l.score != null && (
                           <span className={`text-[11px] font-bold tabular ${l.score >= 60 ? 'text-emerald-300' : l.score >= 35 ? 'text-amber-300' : 'text-slate-500'}`}>{l.score}</span>
                         )}
-                        {(() => { const a = analisis(l.notas); const b = a?.etapa || info;
-                          return <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${b.cls}`}>{b.label}</span>; })()}
+                        {<span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${info.cls}`}>{info.label}</span>}
                       </span>
                     </div>
                     {l.ultima_direccion === 'in' && (

@@ -18,7 +18,8 @@ import { descargarMedia } from '../media.js';
 
 export const leadsRouter = Router();
 
-const ESTADOS = ['nuevo', 'contactado', 'atendido', 'convertido', 'descartado'];
+// Embudo del vendedor (orden = columnas del tablero). Los valores viejos se conservan: contactado=En espera, atendido=Interesado, convertido=Cliente.
+const ESTADOS = ['nuevo', 'contactado', 'atendido', 'demo', 'cotizado', 'por_pagar', 'convertido', 'descartado'];
 
 // :id numerico (evita 500 por tipo en Postgres). No aplica a rutas estaticas.
 leadsRouter.param('id', (req, res, next, val) => {
