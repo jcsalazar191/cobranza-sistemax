@@ -46,7 +46,9 @@ async function revisar() {
         hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/Lima',
       });
       const quien = c.nombre || c.telefono;
-      const texto = `⏰ Recordatorio: ${c.texto} con *${quien}* hoy a las ${hora}.`;
+      // El numero va siempre: WhatsApp lo hace clicable y abre el chat aunque
+      // el contacto no este agendado.
+      const texto = `⏰ Recordatorio: ${c.texto} con *${quien}* hoy a las ${hora}.\n📱 +${c.telefono}`;
       try {
         await enviarTexto(numero, texto);
         // Se marca ANTES de seguir con la siguiente: si el envio ya salio, no
