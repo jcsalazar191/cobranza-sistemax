@@ -1,10 +1,11 @@
 // MEDIA de WhatsApp: descarga (Evolution descifra por nosotros) y guarda el
-// archivo para que Jean lo vea. No se manda a modelos de IA: leer/transcribir
+// archivo para que Jean lo vea. Solo se manda a IA (leerMedia.js) si se pide `leer` (posibles): leer/transcribir
 // multimedia consume creditos y no es necesario para el flujo comercial.
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getEvolutionCreds } from './evolution.js';
+import { leerMedia } from './leerMedia.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const MEDIA_DIR = process.env.MEDIA_DIR || resolve(__dirname, '../media');
@@ -48,12 +49,14 @@ export async function guardarArchivo(waMessageId, base64, mimetype) {
   return nombre;
 }
 
-// Procesa un media completo: descarga y guarda el archivo, sin leer su contenido.
-// Devuelve lo necesario para actualizar el mensaje en la BD.
-export async function procesarMedia(waMessageId) {
+// Procesa un media completo: descarga y guarda el archivo. Con `leer` tambien saca su contenido en
+// texto (Gemini, respaldo OpenRouter gratis); sin `leer` solo lo guarda. Devuelve lo necesario para
+// actualizar el mensaje en la BD.
+export async function procesarMedia(waMessageId, { leer = false } = {}) {
   const { base64, mimetype, fileName } = await descargarMedia(waMessageId);
   const archivo = await guardarArchivo(waMessageId, base64, mimetype);
   const tipo = tipoDeMime(mimetype);
+  const texto = leer ? await leerMedia({ base64, mimetype, tipo }) : '';
 
-  return { archivo, mimetype, fileName, tipo, texto: '' };
+  return { archivo, mimetype, fileName, tipo, texto };
 }

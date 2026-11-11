@@ -14,7 +14,8 @@ export const waWebhookRouter = Router();
 // audio, descripcion de imagen, texto de PDF). Luego actualiza el mensaje y la
 // ficha del lead, para que la IA "vea" lo que el cliente mando.
 async function procesarMediaMensaje({ waId, leadId, esPosible }) {
-  const r = await procesarMedia(waId);
+  // Solo se LEE el contenido de los "posibles" (consume IA); el resto solo se guarda el archivo.
+  const r = await procesarMedia(waId, { leer: esPosible });
   // tipo = r.tipo (NO COALESCE con el que ya habia): el del webhook es solo
   // una suposicion rapida ("documentMessage" = 'pdf' aunque sea .docx); este
   // es el real, sacado del mimetype ya descargado.

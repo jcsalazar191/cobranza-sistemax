@@ -80,6 +80,12 @@ export async function getOpenaiCreds() {
   };
 }
 
+// OpenRouter: respaldo GRATUITO para leer media (audio/imagen/video) si Gemini falla.
+export async function getOpenrouterCreds() {
+  const cfg = await cfgMap();
+  return { apiKey: cfg.openrouter_api_key || process.env.OPENROUTER_API_KEY || '' };
+}
+
 // Config publica: incluye si Gemini esta configurado, pero NO la key.
 function publicCfg(cfg) {
   return {
@@ -119,7 +125,7 @@ configRouter.put('/', requireAdmin, async (req, res, next) => {
     if (oModel) updates.openai_model = oModel;
 
     // API keys: string no vacio = guardar; '' = borrar; ausente = no tocar.
-    for (const campo of ['gemini_api_key', 'nvidia_api_key', 'openai_api_key']) {
+    for (const campo of ['gemini_api_key', 'nvidia_api_key', 'openai_api_key', 'openrouter_api_key']) {
       if (typeof req.body[campo] === 'string') {
         const k = req.body[campo].trim();
         if (k.length > 400) throw new Error('API key demasiado larga.');
