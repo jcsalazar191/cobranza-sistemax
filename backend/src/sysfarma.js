@@ -111,6 +111,9 @@ function tratoCliente(mensajes) {
   return femenino ? 'mi estimada' : 'mi estimado';
 }
 
+// Elige una variante al azar: las respuestas fijas no deben sonar siempre igual.
+const variar = (opciones) => opciones[Math.floor(Math.random() * opciones.length)];
+
 function seguimientoPostDemo(mensajes) {
   const llamada = [...mensajes].reverse().find((m) =>
     /llamada\s+(saliente|entrante)|llamada.*\d+\s*min|duracion.*llamada/i.test(String(m.cuerpo || '')));
@@ -119,10 +122,26 @@ function seguimientoPostDemo(mensajes) {
     : null;
   const trato = tratoCliente(mensajes);
   const saludo = saludoLima();
-  if (dias === 0) return `${saludo}, ${trato}. \u00bfQu\u00e9 le pareci\u00f3 el sistema?`;
-  if (dias === 1) return `${saludo}, ${trato}, \u00bfc\u00f3mo est\u00e1? Ayer conversamos, \u00bfqu\u00e9 le pareci\u00f3 el sistema?`;
-  const tiempo = dias !== null && dias < 30 ? `hace ${dias} d\u00edas` : 'hace varios d\u00edas';
-  return `${saludo}, ${trato}, \u00bfc\u00f3mo est\u00e1? ${tiempo} conversamos, \u00bfqu\u00e9 le pareci\u00f3 el sistema?`;
+  if (dias === 0) {
+    return variar([
+      `${saludo}, ${trato}. ¿Qué le pareció el sistema?`,
+      `${saludo}. ¿Cómo le fue con la demostración? Quedo atento a sus comentarios.`,
+      `${saludo}, ${trato}. ¿Pudo ver todo lo que necesitaba? Cuénteme qué le pareció.`,
+    ]);
+  }
+  if (dias === 1) {
+    return variar([
+      `${saludo}, ${trato}, ¿cómo está? Ayer conversamos; ¿qué le pareció el sistema?`,
+      `${saludo}. Quería saber cómo le fue con el sistema desde ayer. ¿Alguna duda?`,
+      `${saludo}, ${trato}. ¿Pudo revisar el sistema con calma? Con gusto resuelvo cualquier consulta.`,
+    ]);
+  }
+  const tiempo = dias !== null && dias < 30 ? `hace ${dias} días` : 'hace varios días';
+  const Tiempo = tiempo.charAt(0).toUpperCase() + tiempo.slice(1);
+  return variar([
+    `${saludo}, ${trato}, ¿cómo está? ${Tiempo} conversamos; ¿qué le pareció el sistema?`,
+    `${saludo}. ${Tiempo} le mostré el sistema; ¿pudo evaluarlo? Quedo atento.`,
+  ]);
 }
 
 function respuestaLlamadaPendiente(mensajes) {
@@ -137,7 +156,7 @@ function respuestaLlamadaPendiente(mensajes) {
     const tiempo = dias < 30 ? `hace ${dias} d\u00edas` : 'hace varios d\u00edas';
     return `${saludoLima()}, ${trato}, \u00bfc\u00f3mo est\u00e1? ${tiempo} quedamos en conversar. \u00bfA\u00fan desea que coordinemos la demostraci\u00f3n?`;
   }
-  return `Perfecto, ${trato}. Le llamo ahora.`;
+  return variar([`Perfecto, ${trato}. Le llamo ahora.`, 'Muy bien. En un momento le llamo.', `Gracias, ${trato}. Le llamo en unos minutos.`]);
 }
 
 function horarioRecientePropuesto(mensajes) {
@@ -197,7 +216,11 @@ function validarSugerencia(texto, mensajes = [], contextoManual = '') {
     const siguiente = remoto
       ? 'ese día nos conectamos por AnyDesk.'
       : 'le enviaré el enlace antes de la demo.';
-    return `Perfecto, ${tratoCliente(mensajes)}. Quedamos para ${horario}; ${siguiente}`;
+    return variar([
+      `Perfecto, ${tratoCliente(mensajes)}. Quedamos para ${horario}; ${siguiente}`,
+      `Muy bien. Queda agendado para ${horario}; ${siguiente}`,
+      `Confirmado para ${horario}. ${siguiente.charAt(0).toUpperCase()}${siguiente.slice(1)}`,
+    ]);
   }
   if (flujoTecnicoCompletado(mensajes)) {
     return seguimientoPostDemo(mensajes);
@@ -207,7 +230,7 @@ function validarSugerencia(texto, mensajes = [], contextoManual = '') {
   const mencionaMasTarde = /\b(mas tarde|luego|despues)\b/i.test(ultimoTexto);
   const mencionaHora = /\b\d{1,2}(?::\d{2})?\s*(?:a\.?\s*m\.?|p\.?\s*m\.?|de la manana|de la tarde|de la noche)\b/i.test(ultimoTexto);
   if (mencionaMasTarde && !mencionaHora) {
-    return '¿A que hora le seria mas comodo conectarse?';
+    return variar(['¿A qué hora le resulta más cómodo conectarnos?', '¿Qué hora le conviene para conectarnos?', '¿Cuál sería el mejor horario para usted?']);
   }
   }
   const femenino = mensajes.some((m) => m.direccion === 'out'
@@ -230,7 +253,7 @@ async function geminiTexto(system, userText, creds) {
     body: JSON.stringify({
       system_instruction: { parts: [{ text: system }] },
       contents: [{ role: 'user', parts: [{ text: userText }] }],
-      generationConfig: { thinkingConfig: { thinkingBudget: 0 }, temperature: 0.5 },
+      generationConfig: { thinkingConfig: { thinkingBudget: 0 }, temperature: 0.7 },
     }),
     signal: AbortSignal.timeout(12000),
   });
@@ -308,6 +331,12 @@ REGLA CRITICA -- LEE TODA LA CONVERSACION ANTES DE ESCRIBIR:
   que se acuerda de todo lo hablado.
 - Los marcadores "📷 [foto]", "🎤 [nota de voz]", "📞 Llamada ..." son contexto de lo que
   ya paso: tenlos en cuenta (una llamada larga = ya hablaron de eso).
+
+ESTILO DE LA RESPUESTA (siempre):
+- CONTINUA la conversacion segun lo que el cliente acaba de responder: contesta lo que pregunto o dijo y propone el siguiente paso logico. No repitas lo ya dicho.
+- VARIA: no empieces ni cierres igual que tus ultimos mensajes [JEAN] de arriba, ni uses siempre la misma formula. Alterna el trato ("mi estimado", el nombre del cliente, o sin trato); no pongas "mi estimado" en cada mensaje.
+- PROFESIONAL y cordial: trato de "usted", lenguaje claro y correcto, sin jerga, sin "jaja", sin errores de ortografia. Maximo un emoji y solo si encaja.
+- CLARO y BREVE: 1 a 3 frases (unas 45 palabras como maximo), una sola idea, y termina con una pregunta o accion concreta. Nada de parrafos largos. Solo usa lista si el cliente pide datos puntuales (planes, pagos, requisitos).
 
 OJO CON LAS FECHAS (cada mensaje lleva entre parentesis hace cuanto se escribio):
 - HOY es ${new Date().toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Lima' })}.
