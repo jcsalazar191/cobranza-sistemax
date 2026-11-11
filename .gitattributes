@@ -1,0 +1,3 @@
+# Los scripts y el compose se ejecutan en Linux: siempre LF.
+*.sh text eol=lf
+docker-compose.yml text eol=lf

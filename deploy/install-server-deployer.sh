@@ -11,8 +11,9 @@ COMPOSE_SOURCE="$ROOT/docker-compose.yml"
 [[ -f "$COMPOSE_SOURCE" ]] || { echo 'No se encontro docker-compose.yml.' >&2; exit 1; }
 bash -n "$SOURCE"
 
-scp -q "$SOURCE" "$HOST:/tmp/deploy-apk-cobranza.new"
-scp -q "$COMPOSE_SOURCE" "$HOST:/tmp/cobranza-compose.new"
+# Se envia sin CR (Windows): un script con CRLF no corre en Linux.
+tr -d '\r' < "$SOURCE" | ssh -o BatchMode=yes "$HOST" 'cat > /tmp/deploy-apk-cobranza.new'
+tr -d '\r' < "$COMPOSE_SOURCE" | ssh -o BatchMode=yes "$HOST" 'cat > /tmp/cobranza-compose.new'
 ssh -o BatchMode=yes "$HOST" 'bash -s' <<'REMOTE'
 set -e
 install -d -m 0750 /var/lib/cobranza-releases/incoming /var/backups/cobranza
