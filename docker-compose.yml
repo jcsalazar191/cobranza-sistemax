@@ -20,6 +20,9 @@ services:
       retries: 12
 
   app:
+    # APP_IMAGE permite promover una imagen ya construida sin reconstruir ni
+    # modificar la base. En uso local se conserva la imagen por defecto.
+    image: ${APP_IMAGE:-cobranzasysfarmape-app:latest}
     build: .
     restart: unless-stopped
     depends_on:

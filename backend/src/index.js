@@ -38,9 +38,9 @@ app.use(cookieParser());
 app.get('/api/health', async (req, res) => {
   try {
     await query('SELECT 1');
-    res.json({ ok: true, db: true });
+    res.json({ ok: true, db: true, commit: process.env.GIT_COMMIT || 'unknown' });
   } catch {
-    res.status(503).json({ ok: false, db: false });
+    res.status(503).json({ ok: false, db: false, commit: process.env.GIT_COMMIT || 'unknown' });
   }
 });
 

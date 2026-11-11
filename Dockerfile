@@ -9,7 +9,9 @@ RUN npm run build   # usa .env.production (VITE_API_URL=/api)
 # ---------- runtime backend (sirve API + frontend) ----------
 FROM node:20-alpine
 RUN apk add --no-cache tzdata
+ARG GIT_COMMIT=unknown
 ENV NODE_ENV=production TZ=America/Lima
+ENV GIT_COMMIT=$GIT_COMMIT
 WORKDIR /app/backend
 COPY backend/package*.json ./
 RUN npm ci --omit=dev

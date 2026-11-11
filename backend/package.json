@@ -9,6 +9,8 @@
     "start": "node src/index.js",
     "test": "node --test",
     "migrate": "node scripts/run-sql.js schema.sql",
+    "migrate:check": "node scripts/migrate-deploy.js --check",
+    "migrate:deploy": "node scripts/migrate-deploy.js --apply",
     "migrate:aprendizaje": "node scripts/run-sql.js ../aprendizaje.sql",
     "seed": "node scripts/run-sql.js seed.sql"
   },

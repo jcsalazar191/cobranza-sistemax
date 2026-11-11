@@ -1,0 +1,6 @@
+-- deploy: backward-compatible
+--
+-- Baseline de la instancia que ya existia antes de tener migraciones.
+-- No contiene DDL: schema.sql sigue siendo exclusivamente la inicializacion
+-- de un volumen PostgreSQL nuevo. El runner comprueba las tablas minimas antes
+-- de registrar este punto, para no marcar una base vacia por error.
