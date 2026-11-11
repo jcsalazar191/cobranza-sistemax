@@ -71,8 +71,11 @@ cleanup_old_images() {
     xargs -r -I{} docker rmi "$IMAGE:{}" >/dev/null 2>&1 || true
 }
 
+RELEASE_DIR=''; DEPLOY_DONE=0
+cleanup_release() { [[ "$DEPLOY_DONE" == 1 || -z "$RELEASE_DIR" ]] || rm -rf "$RELEASE_DIR"; }
+
 deploy() { # archivo SHA-256 commit
-  local archive=$1 archive_sha=$2 commit=$3 short candidate release check_json pending_count rollback_safe rollback_tag
+  local archive=$1 archive_sha=$2 commit=$3 short candidate release check_json pending_count rollback_safe rollback_tag running_image
   [[ "$archive" == "$INCOMING"/* ]] || die 'el archivo debe estar dentro del directorio incoming autorizado.'
   [[ "$archive" =~ ^$INCOMING/cobranza-[0-9a-f]{40}\.tgz$ ]] || die 'nombre de paquete invalido.'
   [[ "$archive_sha" =~ ^[0-9a-f]{64}$ ]] || die 'SHA-256 invalido.'
@@ -89,6 +92,7 @@ deploy() { # archivo SHA-256 commit
   [[ ! -e "$release" ]] || die "ya existe un release para $commit; no se sobrescribe."
   install -d -m 0750 "$RELEASE_ROOT" "$INCOMING" "$BACKUP_DIR"
   mkdir -m 0750 "$release"
+  RELEASE_DIR=$release; trap cleanup_release EXIT   # si algo falla antes de terminar, no queda un release a medias que bloquee el reintento
   tar -xzf "$archive" -C "$release" --no-same-owner --no-same-permissions
   [[ -f "$release/Dockerfile" ]] || die 'release extraido sin Dockerfile en la raiz.'
   log "BUILD_START commit=$commit"
@@ -110,11 +114,14 @@ deploy() { # archivo SHA-256 commit
   fi
 
   rollback_tag="rollback-pre-$short"
-  docker image inspect "$IMAGE:latest" >/dev/null || die 'no existe imagen actual para rollback.'
-  docker tag "$IMAGE:latest" "$IMAGE:$rollback_tag"
+  # Respaldo = la imagen que corre AHORA (no :latest, que puede ir por detras).
+  running_image=$(docker inspect -f '{{.Image}}' cobranzasysfarmape-app-1) || die 'no puedo leer la imagen en ejecucion.'
+  docker tag "$running_image" "$IMAGE:$rollback_tag"
   log "APP_RECREATE commit=$commit"
   APP_IMAGE="$candidate" compose up -d --no-build --no-deps --force-recreate "$SERVICE" >/dev/null
   if wait_for_health "$commit"; then
+    docker tag "$candidate" "$IMAGE:latest"   # que un `compose up` sin APP_IMAGE no vuelva a una version vieja
+    DEPLOY_DONE=1
     cleanup_old_images
     log "DEPLOY_OK commit=$commit migrations=$pending_count"
     printf 'DEPLOY_OK %s\n' "$commit"

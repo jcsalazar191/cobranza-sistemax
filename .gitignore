@@ -18,6 +18,9 @@ dist/
 .preview-*.png
 .DS_Store
 Thumbs.db
+
+# Configuracion local de Claude Code
+.claude/
 .okey
 .nkey
 .gkey

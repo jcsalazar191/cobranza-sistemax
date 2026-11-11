@@ -3,6 +3,7 @@
 // NVIDIA. Devuelve TEXTO plano listo para revisar y enviar. No envia nada.
 import { getGeminiCreds, getNvidiaCreds, getOpenaiCreds } from './routes/config.js';
 import { memoriaATexto } from './memoria.js';
+import { enmascarar } from './privacidad.js';
 
 // Saludo segun la hora de Lima.
 export function saludoLima(hoy = new Date()) {
@@ -95,7 +96,7 @@ function conversacionTexto(mensajes) {
       const cuando = hace(m.fecha);
       const media = m.media_archivo
         ? `[${m.tipo || 'archivo'}${m.media_nombre ? `: ${m.media_nombre}` : ''}]`
-        : m.cuerpo;
+        : enmascarar(m.cuerpo); // la IA no necesita ver claves/usuarios SOL
       return `${m.direccion === 'in' ? '[CLIENTE]' : '[JEAN]'}${cuando ? ` (${cuando})` : ''}: ${media}`;
     })
     .join('\n');

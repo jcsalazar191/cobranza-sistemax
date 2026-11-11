@@ -9,6 +9,7 @@
 //     se vuelven a inferir. Es la base para responder de forma autonoma.
 import { query } from './db.js';
 import { getOpenaiCreds, getGeminiCreds } from './routes/config.js';
+import { enmascarar } from './privacidad.js';
 
 const ESQUEMA = `{
   "etapa": "primer_contacto|info_enviada|demo|cotizado|por_confirmar|negociando|por_pagar|cerrado|frio|descartado",
@@ -132,7 +133,7 @@ const linea = (m) => {
   }
   const contenido = m.media_archivo
     ? `[${m.tipo || 'archivo'}${m.media_nombre ? `: ${m.media_nombre}` : ''}]`
-    : m.cuerpo;
+    : enmascarar(m.cuerpo); // la IA no necesita ver claves/usuarios SOL
   return `${m.direccion === 'in' ? 'CLIENTE' : 'JEAN'}${dia}: ${contenido}`;
 };
 

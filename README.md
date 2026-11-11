@@ -64,6 +64,8 @@ persisten en el volumen `pgdata`.
   chat avisa y todo lo demás funciona igual. **La key se guarda en tu base de
   datos, nunca se comparte.**
 
+> **Producción (cobranza.sysfarma.pe):** se despliega con `./deploy/deploy.sh`; ver [deploy/DEPLOY.md](deploy/DEPLOY.md).
+
 > Para correrlo en local sin Docker (desarrollo), mira la sección siguiente.
 
 ---
