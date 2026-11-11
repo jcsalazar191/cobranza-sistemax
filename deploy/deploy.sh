@@ -49,7 +49,7 @@ deploy() {
   archive_dir=$(mktemp -d "${TMPDIR:-/tmp}/cobranza-deploy.XXXXXX")
   archive="$archive_dir/cobranza-$commit.tgz"
   remote_archive="$REMOTE_INCOMING/cobranza-$commit.tgz"
-  trap 'rm -rf "$archive_dir"' EXIT
+  trap "rm -rf '$archive_dir'" EXIT
   git archive --format=tar.gz --output="$archive" "$commit"
   archive_sha=$(sha256sum "$archive" | awk '{print $1}')
   scp -q "$archive" "$HOST:$remote_archive"

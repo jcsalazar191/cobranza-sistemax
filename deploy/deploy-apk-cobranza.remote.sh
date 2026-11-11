@@ -82,8 +82,11 @@ deploy() { # archivo SHA-256 commit
   [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || die 'commit invalido.'
   [[ -f "$archive" ]] || die 'el paquete no existe en incoming.'
   printf '%s  %s\n' "$archive_sha" "$archive" | sha256sum -c - >/dev/null || die 'el SHA-256 del paquete no coincide.'
-  tar -tzf "$archive" | grep -Eq '(^|/)Dockerfile$' || die 'el paquete no contiene Dockerfile.'
-  tar -tzf "$archive" | grep -Eq '(^|/)backend/package.json$' || die 'el paquete no contiene backend/package.json.'
+  # Se lee la lista completa antes de filtrar: `grep -q | tar` con pipefail falla por SIGPIPE aunque el archivo este bien.
+  local listing
+  listing=$(tar -tzf "$archive") || die 'el paquete no se puede leer.'
+  grep -Eq '(^|/)Dockerfile$' <<<"$listing" || die 'el paquete no contiene Dockerfile.'
+  grep -Eq '(^|/)backend/package.json$' <<<"$listing" || die 'el paquete no contiene backend/package.json.'
 
   check_server
   short=${commit:0:12}
