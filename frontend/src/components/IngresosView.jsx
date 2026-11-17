@@ -77,6 +77,7 @@ export default function IngresosView() {
   const hoy = new Date();
   const [anio, setAnio] = useState(hoy.getFullYear());
   const [mesSel, setMesSel] = useState(hoy.getMonth() + 1); // 1-12
+  const [reporte, setReporte] = useState('cobros');
   const [data, setData] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
@@ -145,64 +146,95 @@ export default function IngresosView() {
         </div>
       </div>
 
-      <GraficoMensual
-        titulo="Dinero cobrado por mes"
-        descripcion="Toca una barra para ver sus pagos. Los planes adelantados pueden concentrar varios meses en un cobro."
-        meses={meses} campo="total" color="#34d399" formatear={soles}
-        mesSeleccionado={mesSel} onSeleccionar={setMesSel}
-      />
-      <div className="rounded-2xl bg-slate-900 border border-slate-700/50 p-4" aria-live="polite">
-        <div className="flex items-center justify-between gap-3 mb-3">
-          <h3 className="text-sm font-semibold text-slate-200 capitalize">Cobros de {MESES_LARGOS[mesSel - 1]} {anio}</h3>
-          <span className="tabular font-bold text-emerald-300">{soles(mes?.total ?? 0)}</span>
-        </div>
-        {cargando ? (
-          <p className="text-sm text-slate-500">Cargando detalle...</p>
-        ) : !mes || mes.pagos.length === 0 ? (
-          <p className="text-sm text-slate-500">Sin pagos registrados este mes.</p>
-        ) : (
-          <ul className="space-y-2">
-            {mes.pagos.map((p) => (
-              <li key={p.id} className="flex items-center justify-between gap-3 text-sm rounded-lg bg-slate-800/50 px-3 py-2">
-                <div className="min-w-0">
-                  <p className="text-slate-200 truncate">{p.nombre}</p>
-                  <p className="text-xs text-slate-500">
-                    {String(p.fecha).slice(0, 10)} · {p.meses === 0 ? 'abono' : `${p.meses} mes(es)`} · {p.medio}
-                    {p.comprobante ? ` · ${p.comprobante}` : ''}
-                  </p>
-                </div>
-                <span className="tabular font-semibold text-emerald-300 shrink-0">{soles(p.monto_total)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
+      <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-slate-900 border border-slate-700/50" role="tablist" aria-label="Reportes de crecimiento">
+        {[
+          { id: 'cobros', label: 'Cobros', color: 'emerald' },
+          { id: 'clientes', label: 'Clientes', color: 'sky' },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            id={`tab-${tab.id}`}
+            aria-controls={`panel-${tab.id}`}
+            aria-selected={reporte === tab.id}
+            onClick={() => setReporte(tab.id)}
+            className={`h-11 rounded-lg text-sm font-semibold transition-colors cursor-pointer ${
+              reporte === tab.id
+                ? tab.color === 'emerald' ? 'bg-emerald-500 text-slate-950' : 'bg-sky-400 text-slate-950'
+                : 'text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
-      <GraficoMensual
-        titulo="Nuevos clientes por mes"
-        descripcion="Toca una barra para ver quiénes se registraron. El conteo empieza en julio de 2026."
-        meses={mesesAltas} campo="altas" color="#38bdf8" formatear={(n) => `${n} cliente${n === 1 ? '' : 's'}`}
-        mesSeleccionado={mesSel} onSeleccionar={setMesSel}
-      />
-      <div className="rounded-2xl bg-slate-900 border border-slate-700/50 p-4" aria-live="polite">
-        <div className="flex items-center justify-between gap-3 mb-3">
-          <h3 className="text-sm font-semibold text-slate-200 capitalize">Altas de {MESES_LARGOS[mesSel - 1]} {anio}</h3>
-          <span className="tabular font-bold text-sky-300">{mes?.altas ?? 0}</span>
+
+      {reporte === 'cobros' ? (
+        <div id="panel-cobros" role="tabpanel" aria-labelledby="tab-cobros" className="space-y-4">
+          <GraficoMensual
+            titulo="Dinero cobrado por mes"
+            descripcion="Toca una barra para ver sus pagos. Los planes adelantados pueden concentrar varios meses en un cobro."
+            meses={meses} campo="total" color="#34d399" formatear={soles}
+            mesSeleccionado={mesSel} onSeleccionar={setMesSel}
+          />
+          <div className="rounded-2xl bg-slate-900 border border-slate-700/50 p-4" aria-live="polite">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <h3 className="text-sm font-semibold text-slate-200 capitalize">Cobros de {MESES_LARGOS[mesSel - 1]} {anio}</h3>
+              <span className="tabular font-bold text-emerald-300">{soles(mes?.total ?? 0)}</span>
+            </div>
+            {cargando ? (
+              <p className="text-sm text-slate-500">Cargando detalle...</p>
+            ) : !mes || mes.pagos.length === 0 ? (
+              <p className="text-sm text-slate-500">Sin pagos registrados este mes.</p>
+            ) : (
+              <ul className="space-y-2">
+                {mes.pagos.map((p) => (
+                  <li key={p.id} className="flex items-center justify-between gap-3 text-sm rounded-lg bg-slate-800/50 px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="text-slate-200 truncate">{p.nombre}</p>
+                      <p className="text-xs text-slate-500">
+                        {String(p.fecha).slice(0, 10)} · {p.meses === 0 ? 'abono' : `${p.meses} mes(es)`} · {p.medio}
+                        {p.comprobante ? ` · ${p.comprobante}` : ''}
+                      </p>
+                    </div>
+                    <span className="tabular font-semibold text-emerald-300 shrink-0">{soles(p.monto_total)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
-        {!mesesAltas.some((m) => m.mes === mesSel) ? (
-          <p className="text-sm text-slate-500">El conteo de altas comienza en julio de 2026.</p>
-        ) : !mes || mes.clientes_nuevos.length === 0 ? (
-          <p className="text-sm text-slate-500">No hubo altas este mes.</p>
-        ) : (
-          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {mes.clientes_nuevos.map((c) => (
-              <li key={c.id} className="flex items-center justify-between gap-2 rounded-lg bg-slate-800/50 px-3 py-2 text-sm">
-                <span className="text-slate-200 truncate">{c.nombre}</span>
-                <span className="text-xs text-slate-500 shrink-0">{new Date(c.creado_en).toLocaleDateString('es-PE', { timeZone: 'America/Lima', day: 'numeric', month: 'short' })}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      ) : (
+        <div id="panel-clientes" role="tabpanel" aria-labelledby="tab-clientes" className="space-y-4">
+          <GraficoMensual
+            titulo="Nuevos clientes por mes"
+            descripcion="Toca una barra para ver quiénes se registraron. El conteo empieza en julio de 2026."
+            meses={mesesAltas} campo="altas" color="#38bdf8" formatear={(n) => `${n} cliente${n === 1 ? '' : 's'}`}
+            mesSeleccionado={mesSel} onSeleccionar={setMesSel}
+          />
+          <div className="rounded-2xl bg-slate-900 border border-slate-700/50 p-4" aria-live="polite">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <h3 className="text-sm font-semibold text-slate-200 capitalize">Altas de {MESES_LARGOS[mesSel - 1]} {anio}</h3>
+              <span className="tabular font-bold text-sky-300">{mes?.altas ?? 0}</span>
+            </div>
+            {!mesesAltas.some((m) => m.mes === mesSel) ? (
+              <p className="text-sm text-slate-500">El conteo de altas comienza en julio de 2026.</p>
+            ) : !mes || mes.clientes_nuevos.length === 0 ? (
+              <p className="text-sm text-slate-500">No hubo altas este mes.</p>
+            ) : (
+              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {mes.clientes_nuevos.map((c) => (
+                  <li key={c.id} className="flex items-center justify-between gap-2 rounded-lg bg-slate-800/50 px-3 py-2 text-sm">
+                    <span className="text-slate-200 truncate">{c.nombre}</span>
+                    <span className="text-xs text-slate-500 shrink-0">{new Date(c.creado_en).toLocaleDateString('es-PE', { timeZone: 'America/Lima', day: 'numeric', month: 'short' })}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
