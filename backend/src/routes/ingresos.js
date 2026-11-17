@@ -28,7 +28,10 @@ ingresosRouter.get('/:anio', async (req, res, next) => {
         `SELECT EXTRACT(MONTH FROM creado_en AT TIME ZONE 'America/Lima')::int AS mes,
                 COUNT(*)::int AS total
          FROM clientes
-         WHERE creado_en >= make_timestamptz($1, 1, 1, 0, 0, 0, 'America/Lima')
+         WHERE creado_en >= GREATEST(
+                 make_timestamptz($1, 1, 1, 0, 0, 0, 'America/Lima'),
+                 make_timestamptz(2026, 7, 1, 0, 0, 0, 'America/Lima')
+               )
            AND creado_en < make_timestamptz($1 + 1, 1, 1, 0, 0, 0, 'America/Lima')
          GROUP BY 1`,
         [anio],

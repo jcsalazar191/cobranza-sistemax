@@ -6,12 +6,12 @@ import { IconChevron } from './Icons.jsx';
 function GraficoMensual({ titulo, meses, campo, color, formatear, descripcion }) {
   const valores = meses.map((m) => Number(m[campo] || 0));
   const max = Math.max(...valores, 1);
-  const ancho = 720;
-  const alto = 210;
-  const izquierda = 42;
-  const base = 168;
-  const areaAlto = 142;
-  const paso = (ancho - izquierda - 8) / 12;
+  const ancho = 360;
+  const alto = 220;
+  const izquierda = 50;
+  const base = 174;
+  const areaAlto = 140;
+  const paso = (ancho - izquierda - 8) / Math.max(meses.length, 1);
   const compacta = (n) => {
     if (campo !== 'total') return String(Math.round(n));
     if (n >= 10000) return `S/ ${(n / 1000).toFixed(0)}k`;
@@ -25,29 +25,33 @@ function GraficoMensual({ titulo, meses, campo, color, formatear, descripcion })
         <h3 className="text-sm font-semibold text-slate-200">{titulo}</h3>
         <p className="text-xs text-slate-500">{descripcion}</p>
       </div>
-      <div className="w-full overflow-hidden">
-        <svg viewBox={`0 0 ${ancho} ${alto}`} className="w-full h-auto" role="img" aria-label={`${titulo}, gráfico de enero a diciembre`}>
-          <text x="0" y="31" fill="#64748b" fontSize="11">{compacta(max)}</text>
-          <text x="20" y={base + 4} fill="#64748b" fontSize="11">0</text>
-          {[0.25, 0.5, 0.75, 1].map((fraccion) => {
-            const y = base - areaAlto * fraccion;
-            return <line key={fraccion} x1={izquierda} x2={ancho} y1={y} y2={y} stroke="#334155" strokeDasharray="3 5" />;
-          })}
-          {meses.map((m, i) => {
-            const valor = Number(m[campo] || 0);
-            const h = (valor / max) * areaAlto;
-            const x = izquierda + i * paso + paso * 0.2;
-            const w = paso * 0.58;
-            return (
-              <g key={m.mes}>
-                <title>{`${MESES_LARGOS[m.mes - 1]}: ${formatear(valor)}`}</title>
-                <rect x={x} y={base - h} width={w} height={Math.max(h, 1)} rx="4" fill={color} opacity={valor ? 0.86 : 0.18} />
-                <text x={x + w / 2} y="193" textAnchor="middle" fill="#94a3b8" fontSize="10">{MESES_CORTOS[m.mes - 1]}</text>
-              </g>
-            );
-          })}
-        </svg>
-      </div>
+      {meses.length === 0 ? (
+        <p className="rounded-xl bg-slate-800/50 px-3 py-5 text-center text-sm text-slate-400">El conteo de altas empieza en julio de 2026.</p>
+      ) : (
+        <div className="w-full">
+          <svg viewBox={`0 0 ${ancho} ${alto}`} className="block w-full h-auto" role="img" aria-label={`${titulo}, gráfico mensual`}>
+            <text x="0" y="37" fill="#94a3b8" fontSize="12">{compacta(max)}</text>
+            <text x="31" y={base + 4} fill="#94a3b8" fontSize="12">0</text>
+            {[0.25, 0.5, 0.75, 1].map((fraccion) => {
+              const y = base - areaAlto * fraccion;
+              return <line key={fraccion} x1={izquierda} x2={ancho} y1={y} y2={y} stroke="#334155" strokeDasharray="3 5" />;
+            })}
+            {meses.map((m, i) => {
+              const valor = Number(m[campo] || 0);
+              const h = (valor / max) * areaAlto;
+              const x = izquierda + i * paso + paso * 0.16;
+              const w = paso * 0.68;
+              return (
+                <g key={m.mes}>
+                  <title>{`${MESES_LARGOS[m.mes - 1]}: ${formatear(valor)}`}</title>
+                  <rect x={x} y={base - h} width={w} height={Math.max(h, 1)} rx="4" fill={color} opacity={valor ? 0.86 : 0.18} />
+                  <text x={x + w / 2} y="205" textAnchor="middle" fill="#cbd5e1" fontSize="11">{MESES_CORTOS[m.mes - 1]}</text>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+      )}
     </section>
   );
 }
@@ -73,6 +77,7 @@ export default function IngresosView() {
 
   const mes = data?.meses.find((m) => m.mes === mesSel);
   const meses = data?.meses ?? Array.from({ length: 12 }, (_, i) => ({ mes: i + 1, total: 0, altas: 0, pagos: [] }));
+  const mesesAltas = anio === 2026 ? meses.filter((m) => m.mes >= 7) : anio < 2026 ? [] : meses;
 
   return (
     <div className="space-y-4">
@@ -108,13 +113,13 @@ export default function IngresosView() {
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-2">
-        <div className="rounded-xl bg-slate-900 border border-slate-700/50 px-3 py-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        <div className="col-span-2 sm:col-span-1 rounded-xl bg-slate-900 border border-slate-700/50 px-3 py-3">
           <p className="text-[10px] uppercase tracking-wide text-slate-500">Cobrado en {anio}</p>
           <p className="mt-1 text-sm font-bold text-emerald-300 tabular">{soles(data?.total_anio ?? 0)}</p>
         </div>
         <div className="rounded-xl bg-slate-900 border border-slate-700/50 px-3 py-3">
-          <p className="text-[10px] uppercase tracking-wide text-slate-500">Altas en {anio}</p>
+          <p className="text-[10px] uppercase tracking-wide text-slate-500">{anio === 2026 ? 'Altas desde jul. 2026' : `Altas en ${anio}`}</p>
           <p className="mt-1 text-sm font-bold text-sky-300 tabular">{data?.total_altas ?? 0}</p>
         </div>
         <div className="rounded-xl bg-slate-900 border border-slate-700/50 px-3 py-3">
@@ -130,12 +135,12 @@ export default function IngresosView() {
       />
       <GraficoMensual
         titulo="Nuevos clientes por mes"
-        descripcion="Altas según la fecha de registro. El total de activos se muestra aparte porque no hay historial de bajas."
-        meses={meses} campo="altas" color="#38bdf8" formatear={(n) => `${n} cliente${n === 1 ? '' : 's'}`}
+        descripcion="Se excluye la carga inicial del sistema; el conteo empieza en julio de 2026."
+        meses={mesesAltas} campo="altas" color="#38bdf8" formatear={(n) => `${n} cliente${n === 1 ? '' : 's'}`}
       />
 
       {/* Selección de mes para consultar el detalle */}
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         {meses.map((m) => {
           const activo = m.mes === mesSel;
           const vacio = m.total === 0;
