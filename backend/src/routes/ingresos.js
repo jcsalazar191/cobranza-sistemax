@@ -25,15 +25,15 @@ ingresosRouter.get('/:anio', async (req, res, next) => {
         [anio],
       ),
       query(
-        `SELECT EXTRACT(MONTH FROM creado_en AT TIME ZONE 'America/Lima')::int AS mes,
-                COUNT(*)::int AS total
+        `SELECT id, nombre, creado_en,
+                EXTRACT(MONTH FROM creado_en AT TIME ZONE 'America/Lima')::int AS mes
          FROM clientes
          WHERE creado_en >= GREATEST(
                  make_timestamptz($1, 1, 1, 0, 0, 0, 'America/Lima'),
                  make_timestamptz(2026, 7, 1, 0, 0, 0, 'America/Lima')
                )
            AND creado_en < make_timestamptz($1 + 1, 1, 1, 0, 0, 0, 'America/Lima')
-         GROUP BY 1`,
+         ORDER BY creado_en, nombre`,
         [anio],
       ),
       query('SELECT COUNT(*)::int AS total FROM clientes WHERE activo = TRUE'),
@@ -43,10 +43,15 @@ ingresosRouter.get('/:anio', async (req, res, next) => {
       mes: i + 1,
       total: 0,
       altas: 0,
+      clientes_nuevos: [],
       pagos: [],
     }));
 
-    for (const alta of altas) meses[alta.mes - 1].altas = alta.total;
+    for (const alta of altas) {
+      const m = meses[alta.mes - 1];
+      m.altas += 1;
+      m.clientes_nuevos.push({ id: alta.id, nombre: alta.nombre, creado_en: alta.creado_en });
+    }
 
     for (const p of rows) {
       const m = meses[p.mes - 1];

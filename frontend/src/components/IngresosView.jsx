@@ -3,7 +3,7 @@ import { api } from '../api.js';
 import { soles, MESES_CORTOS, MESES_LARGOS } from '../lib/ui.js';
 import { IconChevron } from './Icons.jsx';
 
-function GraficoMensual({ titulo, meses, campo, color, formatear, descripcion }) {
+function GraficoMensual({ titulo, meses, campo, color, formatear, descripcion, mesSeleccionado, onSeleccionar }) {
   const valores = meses.map((m) => Number(m[campo] || 0));
   const max = Math.max(...valores, 1);
   const ancho = 360;
@@ -29,7 +29,7 @@ function GraficoMensual({ titulo, meses, campo, color, formatear, descripcion })
         <p className="rounded-xl bg-slate-800/50 px-3 py-5 text-center text-sm text-slate-400">El conteo de altas empieza en julio de 2026.</p>
       ) : (
         <div className="w-full">
-          <svg viewBox={`0 0 ${ancho} ${alto}`} className="block w-full h-auto" role="img" aria-label={`${titulo}, gráfico mensual`}>
+          <svg viewBox={`0 0 ${ancho} ${alto}`} className="block w-full h-auto" role="group" aria-label={`${titulo}, gráfico mensual`}>
             <text x="0" y="37" fill="#94a3b8" fontSize="12">{compacta(max)}</text>
             <text x="31" y={base + 4} fill="#94a3b8" fontSize="12">0</text>
             {[0.25, 0.5, 0.75, 1].map((fraccion) => {
@@ -41,10 +41,27 @@ function GraficoMensual({ titulo, meses, campo, color, formatear, descripcion })
               const h = (valor / max) * areaAlto;
               const x = izquierda + i * paso + paso * 0.16;
               const w = paso * 0.68;
+              const seleccionado = m.mes === mesSeleccionado;
+              const elegir = () => onSeleccionar(m.mes);
               return (
-                <g key={m.mes}>
-                  <title>{`${MESES_LARGOS[m.mes - 1]}: ${formatear(valor)}`}</title>
-                  <rect x={x} y={base - h} width={w} height={Math.max(h, 1)} rx="4" fill={color} opacity={valor ? 0.86 : 0.18} />
+                <g
+                  key={m.mes}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={seleccionado}
+                  aria-label={`${MESES_LARGOS[m.mes - 1]}: ${formatear(valor)}. Ver detalle`}
+                  onClick={elegir}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      elegir();
+                    }
+                  }}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <title>{`${MESES_LARGOS[m.mes - 1]}: ${formatear(valor)}. Toca para ver detalle.`}</title>
+                  <rect x={izquierda + i * paso} y="24" width={paso} height="188" fill="#ffffff" opacity="0.001" />
+                  <rect x={x} y={base - h} width={w} height={Math.max(h, 2)} rx="4" fill={color} opacity={valor ? 0.95 : 0.32} stroke={seleccionado ? '#f8fafc' : 'none'} strokeWidth="2" />
                   <text x={x + w / 2} y="205" textAnchor="middle" fill="#cbd5e1" fontSize="11">{MESES_CORTOS[m.mes - 1]}</text>
                 </g>
               );
@@ -130,59 +147,23 @@ export default function IngresosView() {
 
       <GraficoMensual
         titulo="Dinero cobrado por mes"
-        descripcion="Pagos recibidos en el mes; los planes adelantados pueden concentrar varios meses en un solo cobro."
+        descripcion="Toca una barra para ver sus pagos. Los planes adelantados pueden concentrar varios meses en un cobro."
         meses={meses} campo="total" color="#34d399" formatear={soles}
+        mesSeleccionado={mesSel} onSeleccionar={setMesSel}
       />
-      <GraficoMensual
-        titulo="Nuevos clientes por mes"
-        descripcion="Se excluye la carga inicial del sistema; el conteo empieza en julio de 2026."
-        meses={mesesAltas} campo="altas" color="#38bdf8" formatear={(n) => `${n} cliente${n === 1 ? '' : 's'}`}
-      />
-
-      {/* Selección de mes para consultar el detalle */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-        {meses.map((m) => {
-          const activo = m.mes === mesSel;
-          const vacio = m.total === 0;
-          return (
-            <button
-              key={m.mes}
-              type="button"
-              onClick={() => setMesSel(m.mes)}
-              aria-pressed={activo}
-              className={`rounded-xl border px-2 py-2.5 text-left transition-colors cursor-pointer
-                ${activo
-                  ? 'bg-emerald-500/15 border-emerald-500/50'
-                  : 'bg-slate-900 border-slate-700/50 hover:bg-slate-800'}`}
-            >
-              <p className={`text-xs font-semibold ${activo ? 'text-emerald-300' : 'text-slate-300'}`}>
-                {MESES_CORTOS[m.mes - 1]}
-              </p>
-              <p className={`tabular text-sm font-bold ${vacio ? 'text-slate-600' : 'text-slate-100'}`}>
-                {soles(m.total)}
-              </p>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Detalle del mes seleccionado */}
-      <div className="rounded-2xl bg-slate-900 border border-slate-700/50 p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-slate-200 capitalize">
-            {MESES_LARGOS[mesSel - 1]} {anio}
-          </h3>
+      <div className="rounded-2xl bg-slate-900 border border-slate-700/50 p-4" aria-live="polite">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <h3 className="text-sm font-semibold text-slate-200 capitalize">Cobros de {MESES_LARGOS[mesSel - 1]} {anio}</h3>
           <span className="tabular font-bold text-emerald-300">{soles(mes?.total ?? 0)}</span>
         </div>
-
         {cargando ? (
-          <p className="text-sm text-slate-500">Cargando...</p>
+          <p className="text-sm text-slate-500">Cargando detalle...</p>
         ) : !mes || mes.pagos.length === 0 ? (
-          <p className="text-sm text-slate-500">Sin pagos registrados en este mes.</p>
+          <p className="text-sm text-slate-500">Sin pagos registrados este mes.</p>
         ) : (
           <ul className="space-y-2">
             {mes.pagos.map((p) => (
-              <li key={p.id} className="flex items-center justify-between text-sm rounded-lg bg-slate-800/50 px-3 py-2">
+              <li key={p.id} className="flex items-center justify-between gap-3 text-sm rounded-lg bg-slate-800/50 px-3 py-2">
                 <div className="min-w-0">
                   <p className="text-slate-200 truncate">{p.nombre}</p>
                   <p className="text-xs text-slate-500">
@@ -190,7 +171,33 @@ export default function IngresosView() {
                     {p.comprobante ? ` · ${p.comprobante}` : ''}
                   </p>
                 </div>
-                <span className="tabular font-semibold text-emerald-300 shrink-0 ml-2">{soles(p.monto_total)}</span>
+                <span className="tabular font-semibold text-emerald-300 shrink-0">{soles(p.monto_total)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <GraficoMensual
+        titulo="Nuevos clientes por mes"
+        descripcion="Toca una barra para ver quiénes se registraron. El conteo empieza en julio de 2026."
+        meses={mesesAltas} campo="altas" color="#38bdf8" formatear={(n) => `${n} cliente${n === 1 ? '' : 's'}`}
+        mesSeleccionado={mesSel} onSeleccionar={setMesSel}
+      />
+      <div className="rounded-2xl bg-slate-900 border border-slate-700/50 p-4" aria-live="polite">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <h3 className="text-sm font-semibold text-slate-200 capitalize">Altas de {MESES_LARGOS[mesSel - 1]} {anio}</h3>
+          <span className="tabular font-bold text-sky-300">{mes?.altas ?? 0}</span>
+        </div>
+        {!mesesAltas.some((m) => m.mes === mesSel) ? (
+          <p className="text-sm text-slate-500">El conteo de altas comienza en julio de 2026.</p>
+        ) : !mes || mes.clientes_nuevos.length === 0 ? (
+          <p className="text-sm text-slate-500">No hubo altas este mes.</p>
+        ) : (
+          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {mes.clientes_nuevos.map((c) => (
+              <li key={c.id} className="flex items-center justify-between gap-2 rounded-lg bg-slate-800/50 px-3 py-2 text-sm">
+                <span className="text-slate-200 truncate">{c.nombre}</span>
+                <span className="text-xs text-slate-500 shrink-0">{new Date(c.creado_en).toLocaleDateString('es-PE', { timeZone: 'America/Lima', day: 'numeric', month: 'short' })}</span>
               </li>
             ))}
           </ul>
