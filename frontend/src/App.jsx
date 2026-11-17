@@ -303,7 +303,7 @@ export default function App() {
         <div className={`${rol === 'chat' ? 'hidden' : 'grid grid-cols-3'} gap-1 p-1 rounded-xl bg-slate-900 border border-slate-700/50`}>
           {[
             { key: 'clientes', label: 'Clientes' },
-            { key: 'ingresos', label: 'Ingresos' },
+            { key: 'ingresos', label: 'Crecimiento' },
             { key: 'posibles', label: 'Posibles' },
           ].map((v) => (
             <button

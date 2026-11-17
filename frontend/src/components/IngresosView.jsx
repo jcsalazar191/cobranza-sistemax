@@ -3,6 +3,55 @@ import { api } from '../api.js';
 import { soles, MESES_CORTOS, MESES_LARGOS } from '../lib/ui.js';
 import { IconChevron } from './Icons.jsx';
 
+function GraficoMensual({ titulo, meses, campo, color, formatear, descripcion }) {
+  const valores = meses.map((m) => Number(m[campo] || 0));
+  const max = Math.max(...valores, 1);
+  const ancho = 720;
+  const alto = 210;
+  const izquierda = 42;
+  const base = 168;
+  const areaAlto = 142;
+  const paso = (ancho - izquierda - 8) / 12;
+  const compacta = (n) => {
+    if (campo !== 'total') return String(Math.round(n));
+    if (n >= 10000) return `S/ ${(n / 1000).toFixed(0)}k`;
+    if (n >= 1000) return `S/ ${(n / 1000).toFixed(1)}k`;
+    return `S/ ${Math.round(n)}`;
+  };
+
+  return (
+    <section className="rounded-2xl bg-slate-900 border border-slate-700/50 p-4" aria-label={titulo}>
+      <div className="mb-2">
+        <h3 className="text-sm font-semibold text-slate-200">{titulo}</h3>
+        <p className="text-xs text-slate-500">{descripcion}</p>
+      </div>
+      <div className="w-full overflow-hidden">
+        <svg viewBox={`0 0 ${ancho} ${alto}`} className="w-full h-auto" role="img" aria-label={`${titulo}, gráfico de enero a diciembre`}>
+          <text x="0" y="31" fill="#64748b" fontSize="11">{compacta(max)}</text>
+          <text x="20" y={base + 4} fill="#64748b" fontSize="11">0</text>
+          {[0.25, 0.5, 0.75, 1].map((fraccion) => {
+            const y = base - areaAlto * fraccion;
+            return <line key={fraccion} x1={izquierda} x2={ancho} y1={y} y2={y} stroke="#334155" strokeDasharray="3 5" />;
+          })}
+          {meses.map((m, i) => {
+            const valor = Number(m[campo] || 0);
+            const h = (valor / max) * areaAlto;
+            const x = izquierda + i * paso + paso * 0.2;
+            const w = paso * 0.58;
+            return (
+              <g key={m.mes}>
+                <title>{`${MESES_LARGOS[m.mes - 1]}: ${formatear(valor)}`}</title>
+                <rect x={x} y={base - h} width={w} height={Math.max(h, 1)} rx="4" fill={color} opacity={valor ? 0.86 : 0.18} />
+                <text x={x + w / 2} y="193" textAnchor="middle" fill="#94a3b8" fontSize="10">{MESES_CORTOS[m.mes - 1]}</text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+    </section>
+  );
+}
+
 export default function IngresosView() {
   const hoy = new Date();
   const [anio, setAnio] = useState(hoy.getFullYear());
@@ -23,6 +72,7 @@ export default function IngresosView() {
   }, [anio]);
 
   const mes = data?.meses.find((m) => m.mes === mesSel);
+  const meses = data?.meses ?? Array.from({ length: 12 }, (_, i) => ({ mes: i + 1, total: 0, altas: 0, pagos: [] }));
 
   return (
     <div className="space-y-4">
@@ -58,9 +108,35 @@ export default function IngresosView() {
         </div>
       )}
 
-      {/* Grilla de 12 meses (cobrado real) */}
       <div className="grid grid-cols-3 gap-2">
-        {(data?.meses ?? Array.from({ length: 12 }, (_, i) => ({ mes: i + 1, total: 0, pagos: [] }))).map((m) => {
+        <div className="rounded-xl bg-slate-900 border border-slate-700/50 px-3 py-3">
+          <p className="text-[10px] uppercase tracking-wide text-slate-500">Cobrado en {anio}</p>
+          <p className="mt-1 text-sm font-bold text-emerald-300 tabular">{soles(data?.total_anio ?? 0)}</p>
+        </div>
+        <div className="rounded-xl bg-slate-900 border border-slate-700/50 px-3 py-3">
+          <p className="text-[10px] uppercase tracking-wide text-slate-500">Altas en {anio}</p>
+          <p className="mt-1 text-sm font-bold text-sky-300 tabular">{data?.total_altas ?? 0}</p>
+        </div>
+        <div className="rounded-xl bg-slate-900 border border-slate-700/50 px-3 py-3">
+          <p className="text-[10px] uppercase tracking-wide text-slate-500">Activos hoy</p>
+          <p className="mt-1 text-sm font-bold text-slate-100 tabular">{data?.clientes_activos ?? '—'}</p>
+        </div>
+      </div>
+
+      <GraficoMensual
+        titulo="Dinero cobrado por mes"
+        descripcion="Pagos recibidos en el mes; los planes adelantados pueden concentrar varios meses en un solo cobro."
+        meses={meses} campo="total" color="#34d399" formatear={soles}
+      />
+      <GraficoMensual
+        titulo="Nuevos clientes por mes"
+        descripcion="Altas según la fecha de registro. El total de activos se muestra aparte porque no hay historial de bajas."
+        meses={meses} campo="altas" color="#38bdf8" formatear={(n) => `${n} cliente${n === 1 ? '' : 's'}`}
+      />
+
+      {/* Selección de mes para consultar el detalle */}
+      <div className="grid grid-cols-3 gap-2">
+        {meses.map((m) => {
           const activo = m.mes === mesSel;
           const vacio = m.total === 0;
           return (
